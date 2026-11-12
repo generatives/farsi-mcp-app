@@ -15,5 +15,6 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY litestream.yml /etc/litestream.yml
 COPY entrypoint.sh /entrypoint.sh
 COPY app ./app
-RUN chmod +x /entrypoint.sh && mkdir -p /data
+# Strip Windows CRLF line endings, which break the #!/bin/sh line
+RUN sed -i 's/\r$//' /entrypoint.sh && chmod +x /entrypoint.sh && mkdir -p /data
 CMD ["/entrypoint.sh"]
