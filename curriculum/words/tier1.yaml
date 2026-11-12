@@ -1,0 +1,427 @@
+# Tier 1 words, hand-picked for the reduced curriculum. Rank is approximate
+# (by hand, not yet from the FrequencyWords list). Only nouns, adjectives,
+# adverbs and pronouns: verbs wait for the present tense (G6).
+
+- id: w.man
+  fa: من
+  translit: "man"
+  en: 'I, me'
+  pos: pronoun
+  rank: 1
+  tags: []
+
+- id: w.to
+  fa: تو
+  translit: "to"
+  en: 'you (informal)'
+  pos: pronoun
+  rank: 2
+  tags: []
+
+- id: w.un
+  fa: اون
+  translit: "un"
+  en: 'he, she, it; that'
+  pos: pronoun
+  rank: 3
+  tags: []
+
+- id: w.ma
+  fa: ما
+  translit: "mâ"
+  en: 'we'
+  pos: pronoun
+  rank: 4
+  tags: []
+
+- id: w.shoma
+  fa: شما
+  translit: "shomâ"
+  en: 'you (polite or plural)'
+  pos: pronoun
+  rank: 5
+  tags: []
+
+- id: w.in
+  fa: این
+  translit: "in"
+  en: 'this'
+  pos: pronoun
+  rank: 6
+  tags: []
+
+- id: w.esm
+  fa: اسم
+  translit: "esm"
+  en: 'name'
+  pos: noun
+  rank: 7
+  tags: [family, work]
+
+- id: w.kar
+  fa: کار
+  translit: "kâr"
+  en: 'work, job'
+  pos: noun
+  rank: 8
+  tags: [work]
+
+- id: w.ahl
+  fa: اهل
+  translit: "ahl"
+  en: 'from (a place): ahl-e Kânâdâ-am, "I''m from Canada"'
+  pos: adjective
+  rank: 9
+  tags: [travel]
+
+- id: w.inja
+  fa: اینجا
+  translit: "injâ"
+  en: 'here'
+  pos: adverb
+  rank: 10
+  tags: [city, travel]
+
+- id: w.unja
+  fa: اونجا
+  translit: "unjâ"
+  en: 'there'
+  pos: adverb
+  rank: 11
+  tags: [city, travel]
+
+- id: w.alan
+  fa: الان
+  translit: "alân"
+  en: 'now'
+  pos: adverb
+  rank: 12
+  tags: [time]
+
+- id: w.emruz
+  fa: امروز
+  translit: "emruz"
+  en: 'today'
+  pos: adverb
+  rank: 13
+  tags: [time]
+
+- id: w.madar
+  fa: مادر
+  translit: "mâdar"
+  en: 'mother'
+  pos: noun
+  rank: 14
+  tags: [family]
+
+- id: w.pedar
+  fa: پدر
+  translit: "pedar"
+  en: 'father'
+  pos: noun
+  rank: 15
+  tags: [family]
+
+- id: w.dadash
+  fa: داداش
+  translit: "dâdâsh"
+  en: 'brother (spoken)'
+  pos: noun
+  rank: 16
+  tags: [family]
+
+- id: w.abji
+  fa: آبجی
+  translit: "âbji"
+  en: 'sister (spoken)'
+  pos: noun
+  rank: 17
+  tags: [family]
+
+- id: w.bachche
+  fa: بچه
+  translit: "bachche"
+  en: 'child, kid'
+  pos: noun
+  rank: 18
+  tags: [family]
+
+- id: w.dust
+  fa: دوست
+  translit: "dust"
+  en: 'friend'
+  pos: noun
+  rank: 19
+  tags: [family, daily]
+
+- id: w.khanevade
+  fa: خانواده
+  translit: "khânevâde"
+  en: 'family'
+  pos: noun
+  rank: 20
+  tags: [family]
+
+- id: w.khune
+  fa: خونه
+  translit: "khune"
+  en: 'house, home'
+  pos: noun
+  rank: 21
+  tags: [home, family]
+
+- id: w.chay
+  fa: چای
+  translit: "chây"
+  en: 'tea'
+  pos: noun
+  rank: 22
+  tags: [food]
+
+- id: w.qahve
+  fa: قهوه
+  translit: "qahve"
+  en: 'coffee'
+  pos: noun
+  rank: 23
+  tags: [food]
+
+- id: w.ab
+  fa: آب
+  translit: "âb"
+  en: 'water'
+  pos: noun
+  rank: 24
+  tags: [food]
+
+- id: w.ghaza
+  fa: غذا
+  translit: "ghazâ"
+  en: 'food, meal'
+  pos: noun
+  rank: 25
+  tags: [food]
+
+- id: w.nun
+  fa: نون
+  translit: "nun"
+  en: 'bread'
+  pos: noun
+  rank: 26
+  tags: [food]
+
+- id: w.ketab
+  fa: کتاب
+  translit: "ketâb"
+  en: 'book'
+  pos: noun
+  rank: 27
+  tags: [home, daily]
+
+- id: w.mashin
+  fa: ماشین
+  translit: "mâshin"
+  en: 'car'
+  pos: noun
+  rank: 28
+  tags: [city, travel]
+
+- id: w.taxi
+  fa: تاکسی
+  translit: "tâksi"
+  en: 'taxi'
+  pos: noun
+  rank: 29
+  tags: [travel, city]
+
+- id: w.hotel
+  fa: هتل
+  translit: "hotel"
+  en: 'hotel'
+  pos: noun
+  rank: 30
+  tags: [travel]
+
+- id: w.forudgah
+  fa: فرودگاه
+  translit: "forudgâh"
+  en: 'airport'
+  pos: noun
+  rank: 31
+  tags: [travel]
+
+- id: w.belit
+  fa: بلیط
+  translit: "belit"
+  en: 'ticket'
+  pos: noun
+  rank: 32
+  tags: [travel, shopping]
+
+- id: w.pul
+  fa: پول
+  translit: "pul"
+  en: 'money'
+  pos: noun
+  rank: 33
+  tags: [shopping]
+
+- id: w.telefon
+  fa: تلفن
+  translit: "telefon"
+  en: 'phone'
+  pos: noun
+  rank: 34
+  tags: [daily]
+
+- id: w.shahr
+  fa: شهر
+  translit: "shahr"
+  en: 'city'
+  pos: noun
+  rank: 35
+  tags: [city, travel]
+
+- id: w.dastshuyi
+  fa: دستشویی
+  translit: "dastshuyi"
+  en: 'toilet, bathroom'
+  pos: noun
+  rank: 36
+  tags: [travel, home]
+
+- id: w.khub
+  fa: خوب
+  translit: "khub"
+  en: 'good, well'
+  pos: adjective
+  rank: 37
+  tags: [feelings, daily]
+
+- id: w.bad
+  fa: بد
+  translit: "bad"
+  en: 'bad'
+  pos: adjective
+  rank: 38
+  tags: [feelings]
+
+- id: w.bozorg
+  fa: بزرگ
+  translit: "bozorg"
+  en: 'big'
+  pos: adjective
+  rank: 39
+  tags: [home, city]
+
+- id: w.kuchik
+  fa: کوچیک
+  translit: "kuchik"
+  en: 'small (spoken)'
+  pos: adjective
+  rank: 40
+  tags: [home, city]
+
+- id: w.khaste
+  fa: خسته
+  translit: "khaste"
+  en: 'tired'
+  pos: adjective
+  rank: 41
+  tags: [feelings, health]
+
+- id: w.gorosne
+  fa: گرسنه
+  translit: "gorosne"
+  en: 'hungry'
+  pos: adjective
+  rank: 42
+  tags: [food, feelings]
+
+- id: w.khoshmaze
+  fa: خوشمزه
+  translit: "khoshmaze"
+  en: 'tasty, delicious'
+  pos: adjective
+  rank: 43
+  tags: [food]
+
+- id: w.qashang
+  fa: قشنگ
+  translit: "qashang"
+  en: 'pretty, nice'
+  pos: adjective
+  rank: 44
+  tags: [home, city]
+
+- id: w.garm
+  fa: گرم
+  translit: "garm"
+  en: 'warm, hot (weather)'
+  pos: adjective
+  rank: 45
+  tags: [weather]
+
+- id: w.sard
+  fa: سرد
+  translit: "sard"
+  en: 'cold'
+  pos: adjective
+  rank: 46
+  tags: [weather]
+
+- id: w.irani
+  fa: ایرانی
+  translit: "irâni"
+  en: 'Iranian'
+  pos: adjective
+  rank: 47
+  tags: [family, travel]
+
+- id: w.kanadayi
+  fa: کانادایی
+  translit: "kânâdâyi"
+  en: 'Canadian'
+  pos: adjective
+  rank: 48
+  tags: [family, travel]
+
+- id: w.kheyli
+  fa: خیلی
+  translit: "kheyli"
+  en: 'very, a lot'
+  pos: adverb
+  rank: 49
+  tags: []
+
+- id: w.ham
+  fa: هم
+  translit: "ham"
+  en: 'also, too'
+  pos: adverb
+  rank: 50
+  tags: []
+
+- id: w.are
+  fa: آره
+  translit: "âre"
+  en: 'yeah, yes (spoken)'
+  pos: adverb
+  rank: 51
+  tags: []
+
+- id: w.na
+  fa: نه
+  translit: "na"
+  en: 'no'
+  pos: adverb
+  rank: 52
+  tags: []
+
+- id: w.ye
+  fa: یه
+  translit: "ye"
+  en: 'a, one (spoken)'
+  pos: adjective
+  rank: 53
+  tags: []

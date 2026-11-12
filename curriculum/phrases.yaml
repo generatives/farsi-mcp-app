@@ -1,0 +1,92 @@
+# Set phrases: whole expressions learned by heart, each tied to a function.
+# A phrase with a slot (…) takes one easy word of that kind.
+
+- id: p.salam
+  function: f.greet
+  order: 1
+  fa: سلام
+  translit: "salâm"
+  en: 'hi'
+  tags: [daily]
+
+- id: p.khubi
+  function: f.greet
+  order: 2
+  fa: خوبی؟
+  translit: "khubi?"
+  en: 'how are you?'
+  tags: [daily]
+
+- id: p.merci
+  function: f.greet
+  order: 3
+  fa: مرسی
+  translit: "merci"
+  en: 'thanks (casual; also "I''m fine, thanks")'
+  tags: [daily]
+
+- id: p.khodahafez
+  function: f.greet
+  order: 4
+  fa: خداحافظ
+  translit: "khodâhâfez"
+  en: 'goodbye'
+  tags: [daily]
+
+- id: p.mamnun
+  function: f.thank
+  order: 5
+  fa: ممنون
+  translit: "mamnun"
+  en: 'thank you'
+  tags: [daily]
+
+- id: p.bebakhshid
+  function: f.thank
+  order: 6
+  fa: ببخشید
+  translit: "bebakhshid"
+  en: 'sorry / excuse me'
+  tags: [daily, city]
+
+- id: p.khahesh-mikonam
+  function: f.thank
+  order: 7
+  fa: خواهش می‌کنم
+  translit: "khâhesh mikonam"
+  en: 'you''re welcome / please, go ahead'
+  tags: [daily]
+
+- id: p.dastet-dard-nakone
+  function: f.thank
+  order: 8
+  fa: دستت درد نکنه
+  translit: "dastet dard nakone"
+  en: 'thank you, for food or help (literally "may your hand not hurt")'
+  tags: [food, family]
+
+- id: p.khoshbakhtam
+  function: f.introduce
+  order: 9
+  fa: خوشبختم
+  translit: "khoshbakhtam"
+  en: 'nice to meet you'
+  tags: [family]
+
+- id: p.chande
+  function: f.ask
+  order: 10
+  fa: … چنده؟
+  translit: "… chande?"
+  en: 'how much is …?'
+  slot: noun
+  tags: [shopping]
+
+- id: p.kojast
+  function: f.ask
+  order: 11
+  fa: … کجاست؟
+  translit: "… kojâst?"
+  en: 'where is …?'
+  slot: noun
+  tags: [travel, city]
