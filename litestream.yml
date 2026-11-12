@@ -1,0 +1,6 @@
+# Litestream streams every change to the SQLite file into a Cloud Storage bucket.
+# ${...} values are filled from environment variables at startup.
+dbs:
+  - path: ${DB_PATH}
+    replica:
+      url: gs://${LITESTREAM_BUCKET}/farsi.db
