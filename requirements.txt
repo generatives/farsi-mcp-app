@@ -1,2 +1,5 @@
 mcp==2.3.0
 uvicorn==0.54.0
+fsrs==6.3.2
+PyYAML==6.0.3
+tzdata==2025.2
