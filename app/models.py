@@ -13,6 +13,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_serializer
 
 Mode = Literal["repeat", "hear", "cued", "say", "situation", "respond", "mission"]
 Outcome = Literal["correct", "helped", "wrong"]
+Part = Literal["warm-up", "scene", "something new", "extra"]
 State = Literal["introduced", "recognizes", "produces with help", "produces freely"]
 
 
@@ -49,6 +50,13 @@ class Item(Strict):
     phrases: list[str] | None = None
 
 
+class Missed(Strict):
+    """An item that caused a problem in an attempt (log_attempt input)."""
+
+    id: str
+    outcome: Literal["helped", "wrong"]
+
+
 class VocabEntry(Strict):
     id: str
     fa: str
@@ -64,7 +72,7 @@ class Scene(Strict):
 
 class Exercise(Strict):
     exercise: int | None = Field(None, description="Position in today's plan.")
-    part: Literal["warm-up", "scene", "something new", "extra"]
+    part: Part
     mode: Mode
     instruction: str
     target: Item

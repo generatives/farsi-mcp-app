@@ -4,6 +4,7 @@ import pytest
 
 from app import curriculum
 from app.db import Database
+from app.models import Exercise
 from app.practice import Practice
 
 
@@ -39,10 +40,10 @@ def practice(cur, db, clock):
     return Practice(cur, db, clock=clock)
 
 
-def run_exercise(p: Practice, ex: dict, clock: Clock, missed=None):
+def run_exercise(p: Practice, ex: Exercise, clock: Clock, missed=None):
     """Log an exercise as Claude would, crediting just its target."""
-    t = ex["target"]
-    kind = {"word": "words", "phrase": "phrases", "grammar": "grammar"}.get(t["kind"])
+    t = ex.target
+    kind = {"word": "words", "phrase": "phrases", "grammar": "grammar"}.get(t.kind)
     clock.advance(seconds=40)
-    kwargs = {kind: [t["id"]]} if kind else {}
-    return p.log_attempt("جمله", ex["mode"], missed=missed or [], function=ex.get("function"), **kwargs)
+    kwargs = {kind: [t.id]} if kind else {}
+    return p.log_attempt("جمله", ex.mode, missed=missed or [], function=ex.function, **kwargs)

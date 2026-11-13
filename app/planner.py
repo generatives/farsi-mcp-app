@@ -15,6 +15,7 @@ from datetime import datetime, timedelta
 from app import settings
 from app.curriculum import Curriculum, Function
 from app.engine import LEVEL_NAMES, Learner, local_day
+from app.models import Exercise, Item, Mode, Part, Scene, VocabEntry
 
 # Exercise mix per level: (mode, weight)
 MIXES = {
@@ -34,13 +35,14 @@ INSTRUCTIONS = {
     "mission": "Run this function's mission as a short role-play: set the situation in English, play the other side in Persian, and keep it to a few exchanges. Log the whole role-play as one attempt with mode 'mission' and this function.",
 }
 
-NEUTRAL_SCENE = {"function": None, "theme": "daily", "setting": "Chatting with a friend over tea"}
-FIRST_ENCOUNTER = ["repeat", "hear", "cued"]
+NEUTRAL_SCENE = Scene(function=None, theme="daily", setting="Chatting with a friend over tea")
+FIRST_ENCOUNTER: list[Mode] = ["repeat", "hear", "cued"]
 
 
 @dataclass
-class Plan:
-    exercises: list[dict] = field(default_factory=list)
+class NewMaterial:
+    """What's new today: items for their first encounter, and a mission if one is ready."""
+
     new_items: list[str] = field(default_factory=list)
     mission: str | None = None
 
@@ -52,26 +54,23 @@ class Planner:
 
     # ----- describing items -----
 
-    def describe(self, item_id: str) -> dict:
+    def describe(self, item_id: str) -> Item:
         item = self.cur.item(item_id)
         level = self.learner.level(item_id)
-        base = {"id": item_id, "kind": item.kind}
+        out = Item(id=item_id, kind=item.kind, state=LEVEL_NAMES[level] if level >= 0 else None)
         if item.kind == "word":
-            base.update(fa=item.fa, translit=item.translit, en=item.en, part_of_speech=item.pos)
-            if item.forms:
-                base["forms"] = item.forms
+            out.fa, out.translit, out.en, out.part_of_speech = item.fa, item.translit, item.en, item.pos
+            out.forms = item.forms or None
         elif item.kind == "phrase":
-            base.update(fa=item.fa, translit=item.translit, en=item.en)
+            out.fa, out.translit, out.en = item.fa, item.translit, item.en
             if item.slot:
-                base["slot"] = f"The … takes one easy {item.slot}."
+                out.slot = f"The … takes one easy {item.slot}."
         elif item.kind == "grammar":
-            base.update(name=item.name, how=item.how.strip(), example=item.example, example_en=item.example_en)
+            out.name, out.how, out.example, out.example_en = item.name, item.how.strip(), item.example, item.example_en
         elif item.kind == "function":
-            base.update(name=item.name, mission=item.mission.strip(),
-                        phrases=[self.cur.phrases[p].fa for p in item.phrases])
-        if level >= 0:
-            base["state"] = LEVEL_NAMES[level]
-        return base
+            out.name, out.mission = item.name, item.mission.strip()
+            out.phrases = [self.cur.phrases[p].fa for p in item.phrases]
+        return out
 
     def name(self, item_id: str) -> str:
         item = self.cur.item(item_id)
@@ -81,7 +80,7 @@ class Planner:
 
     # ----- choosing modes -----
 
-    def pick_mode(self, item_id: str, rng: random.Random, recent: list[str]) -> str:
+    def pick_mode(self, item_id: str, rng: random.Random, recent: list[str]) -> Mode:
         st = self.learner.items[item_id]
         options = MIXES[st.level]
         if len(options) > 1:
@@ -93,10 +92,10 @@ class Planner:
 
     # ----- new material -----
 
-    def new_material(self, now: datetime) -> Plan:
-        plan = Plan()
+    def new_material(self, now: datetime) -> NewMaterial:
+        plan = NewMaterial()
         gate = self.learner.gate(now)
-        if not gate["open"]:
+        if not gate.open:
             return plan
         L, cur = self.learner, self.cur
 
@@ -123,7 +122,7 @@ class Planner:
 
         spa, ipa = L.seconds_per_attempt(), L.items_per_attempt()
         cost = 4 / 7 * spa / ipa
-        cap = min(settings.MAX_NEW_PER_DAY, math.floor(gate["headroom_seconds"] / cost))
+        cap = min(settings.MAX_NEW_PER_DAY, math.floor(gate.headroom_seconds / cost))
         if not L.stage_0_complete():
             cap = min(cap, settings.MAX_NEW_PER_DAY_STAGE_0)
         grammar_today = any(cur.item(i).kind == "grammar" for i in L.new_today(now))
@@ -165,15 +164,15 @@ class Planner:
 
     # ----- scenes -----
 
-    def scene_for(self, f: Function | None) -> dict:
+    def scene_for(self, f: Function | None) -> Scene:
         if f is None:
-            return dict(NEUTRAL_SCENE)
-        return {
-            "function": f.id,
-            "function_name": f.name,
-            "theme": f.tags[0] if f.tags else "daily",
-            "setting": f"A short everyday scene around this situation (not the mission itself): {f.mission.strip()}",
-        }
+            return NEUTRAL_SCENE.model_copy()
+        return Scene(
+            function=f.id,
+            function_name=f.name,
+            theme=f.tags[0] if f.tags else "daily",
+            setting=f"A short everyday scene around this situation (not the mission itself): {f.mission.strip()}",
+        )
 
     def _function_fit(self, item_ids: list[str], open_fns: list[Function]) -> Function | None:
         for i in item_ids[:1]:
@@ -190,16 +189,16 @@ class Planner:
         """Words and set phrases, the two kinds Claude can use as filler."""
         return {**self.cur.words, **self.cur.phrases}
 
-    def _entry(self, item_id: str) -> dict:
+    def _entry(self, item_id: str) -> VocabEntry:
         item = self._vocab()[item_id]
-        return {"id": item_id, "fa": item.fa, "en": item.en}
+        return VocabEntry(id=item_id, fa=item.fa, en=item.en)
 
-    def easy_words(self, now: datetime, scene: dict, exclude: set[str]) -> list[dict]:
+    def easy_words(self, now: datetime, scene: Scene, exclude: set[str]) -> list[VocabEntry]:
         """Up to 15 well-known words and set phrases that fit the scene."""
         L, vocab = self.learner, self._vocab()
         scene_tags = set()
-        if scene.get("function"):
-            scene_tags = set(self.cur.functions[scene["function"]].tags)
+        if scene.function:
+            scene_tags = set(self.cur.functions[scene.function].tags)
         recent = now - timedelta(days=3)
         good = [
             i for i in vocab
@@ -213,7 +212,7 @@ class Planner:
             chosen += [i for i in vocab if L.unlocked(i) and i not in exclude and i not in chosen][: 5 - len(chosen)]
         return [self._entry(i) for i in chosen]
 
-    def known_vocabulary(self, now: datetime, session_id: int) -> list[dict]:
+    def known_vocabulary(self, now: datetime, session_id: int) -> list[VocabEntry]:
         """The learner's best-known words and set phrases, for the whole session.
 
         Highest level first, then most likely to be remembered; ties are shuffled per session
@@ -228,20 +227,20 @@ class Planner:
 
     # ----- the whole session -----
 
-    def plan_session(self, now: datetime, session_id: int, seconds: float) -> list[dict]:
+    def plan_session(self, now: datetime, session_id: int, seconds: float) -> list[Exercise]:
         L = self.learner
         rng = random.Random(session_id)
         spa = L.seconds_per_attempt()
         recent_modes: list[str] = []
         assigned: set[str] = set()
-        out: list[dict] = []
+        out: list[Exercise] = []
 
         # Warm-up: the best-known items, for an easy win.
         warm = sorted((i for i in L.items if L.level(i) == 3 and not L.items[i].leech),
                       key=lambda i: -L.retrievability(i, now))[: settings.WARMUP_MAX]
         for i in warm:
             mode = rng.choice(["say", "situation"])
-            out.append(self._exercise(i, mode, "warm-up", [], NEUTRAL_SCENE))
+            out.append(self._exercise(i, mode, "warm-up", [], NEUTRAL_SCENE, now))
             assigned.add(i)
 
         new = self.new_material(now)
@@ -250,7 +249,7 @@ class Planner:
         n_scene = max(0, int((seconds - len(out) * spa - new_seconds) // spa)) if due else 0
 
         # Targets and their candidates: one hard thing per sentence.
-        raw: list[tuple[str, str, list[str]]] = []
+        raw: list[tuple[str, Mode, list[str]]] = []
         for i in due:
             if len(raw) >= n_scene:
                 break
@@ -290,19 +289,19 @@ class Planner:
 
         for scene, items in ordered:
             for n, (i, mode, include) in enumerate(items):
-                ex = self._exercise(i, mode, "scene", include, scene, now=now)
+                ex = self._exercise(i, mode, "scene", include, scene, now)
                 if n == 0:
-                    ex["new_scene"] = scene
+                    ex.new_scene = scene
                 out.append(ex)
 
         # Something new: a mission, then each new item's first encounter.
         if new.mission:
             f = self.cur.functions[new.mission]
-            out.append({
-                "part": "something new", "mode": "mission", "instruction": INSTRUCTIONS["mission"],
-                "target": self.describe(f.id), "function": f.id, "include": [], "easy_words": [],
-                "new_scene": self.scene_for(f),
-            })
+            out.append(Exercise(
+                part="something new", mode="mission", instruction=INSTRUCTIONS["mission"],
+                target=self.describe(f.id), function=f.id, include=[], easy_words=[],
+                new_scene=self.scene_for(f),
+            ))
         # First encounters, three items at a time: all three repeat, then hear, then cued,
         # so each item comes back after a short gap.
         items = new.new_items
@@ -310,33 +309,33 @@ class Planner:
             group = items[start:start + 3]
             for step, mode in enumerate(FIRST_ENCOUNTER, 1):
                 for i in group:
-                    ex = self._exercise(i, mode, "something new", [], self.scene_for(self.cur.function_of(i)), now=now)
-                    ex["first_encounter"] = f"step {step} of 3"
+                    ex = self._exercise(i, mode, "something new", [], self.scene_for(self.cur.function_of(i)), now)
+                    ex.first_encounter = f"step {step} of 3"
                     if mode != "repeat":
-                        ex["instruction"] = f"First encounter, step {step} of 3. " + INSTRUCTIONS[mode]
+                        ex.instruction = f"First encounter, step {step} of 3. " + INSTRUCTIONS[mode]
                     out.append(ex)
         return out
 
-    def _exercise(self, item_id: str, mode: str, part: str, include: list[str], scene: dict,
-                  now: datetime | None = None) -> dict:
-        ex = {
-            "part": part,
-            "mode": mode,
-            "instruction": INSTRUCTIONS[mode],
-            "target": self.describe(item_id),
-            "include": [self.describe(c) for c in include],
-            "function": scene.get("function"),
-        }
+    def _exercise(self, item_id: str, mode: Mode, part: Part, include: list[str], scene: Scene,
+                  now: datetime) -> Exercise:
         item = self.cur.item(item_id)
+        ex = Exercise(
+            part=part,
+            mode=mode,
+            instruction=INSTRUCTIONS[mode],
+            target=self.describe(item_id),
+            include=[self.describe(c) for c in include],
+            easy_words=self.easy_words(now, scene, {item_id, *include}),
+            function=scene.function,
+        )
         if include:
-            ex["include_note"] = "Work in at most two of these, from the front of the list, only if they fit naturally."
+            ex.include_note = "Work in at most two of these, from the front of the list, only if they fit naturally."
         if item.kind == "word":
             carrier = self._carrier()
             if carrier:
-                ex["carry_with"] = f"Build the sentence on a pattern the learner knows well: {carrier}."
+                ex.carry_with = f"Build the sentence on a pattern the learner knows well: {carrier}."
         if item.kind == "phrase":
-            ex["note"] = "Use the set phrase whole; don't break it into its grammar."
-        ex["easy_words"] = self.easy_words(now or datetime.now(settings.TIMEZONE), scene, {item_id, *include})
+            ex.note = "Use the set phrase whole; don't break it into its grammar."
         return ex
 
     def _carrier(self) -> str | None:
@@ -346,7 +345,7 @@ class Planner:
         best = max(known, key=lambda g: (self.learner.level(g.id), -g.order))
         return best.name
 
-    def extra(self, now: datetime, exclude: set[str], limit: int, session_id: int) -> list[dict]:
+    def extra(self, now: datetime, exclude: set[str], limit: int, session_id: int) -> list[Exercise]:
         """Extra practice once the plan runs out: unlocked items not yet practised this session."""
         L = self.learner
         rng = random.Random(session_id * 7919 + len(exclude))
@@ -354,7 +353,7 @@ class Planner:
                       key=lambda i: L.retrievability(i, now))[:limit]
         out = []
         for i in pool:
-            ex = self._exercise(i, self.pick_mode(i, rng, []), "extra", [], self.scene_for(None), now=now)
-            ex["extra"] = True
+            ex = self._exercise(i, self.pick_mode(i, rng, []), "extra", [], self.scene_for(None), now)
+            ex.extra = True
             out.append(ex)
         return out

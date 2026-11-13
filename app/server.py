@@ -10,7 +10,6 @@ import logging
 import os
 import sys
 import threading
-from typing import Literal, TypedDict
 
 import uvicorn
 from mcp.server.mcpserver import MCPServer
@@ -18,7 +17,7 @@ from mcp.server.transport_security import TransportSecuritySettings
 
 from app import curriculum, settings
 from app.db import Database
-from app.models import LogAttemptResult, NextItemsResult, ProgressResult, StartSessionResult
+from app.models import LogAttemptResult, Missed, Mode, NextItemsResult, ProgressResult, StartSessionResult
 from app.practice import Practice
 
 log = logging.getLogger("farsi")
@@ -75,11 +74,6 @@ list matters most: without it, one wrong ending would mark every word in the sen
 """
 
 
-class Missed(TypedDict):
-    id: str
-    outcome: Literal["helped", "wrong"]
-
-
 SECRET = os.environ.get("MCP_SECRET", "")
 
 mcp = MCPServer(name="farsi-practice", version="0.2.0", instructions=INSTRUCTIONS)
@@ -102,19 +96,19 @@ def practice() -> Practice:
 )
 def start_session() -> StartSessionResult:
     with _lock:
-        return StartSessionResult.model_validate(practice().start_session())
+        return practice().start_session()
 
 
 @mcp.tool(description="Rarely needed: more planned exercises without logging an attempt, for example after a skipped exercise or for extra practice once the plan is done.")
 def next_items(limit: int = 3) -> NextItemsResult:
     with _lock:
-        return NextItemsResult.model_validate(practice().next_items(max(1, min(limit, 10))))
+        return practice().next_items(max(1, min(limit, 10)))
 
 
 @mcp.tool(description=RUBRIC)
 def log_attempt(
     sentence_fa: str,
-    mode: Literal["repeat", "hear", "cued", "say", "situation", "respond", "mission"],
+    mode: Mode,
     words: list[str] | None = None,
     phrases: list[str] | None = None,
     grammar: list[str] | None = None,
@@ -124,17 +118,13 @@ def log_attempt(
 ) -> LogAttemptResult:
     """sentence_fa is the Persian sentence (or, for a mission, the key line) in Persian script."""
     with _lock:
-        return LogAttemptResult.model_validate(
-            practice().log_attempt(
-                sentence_fa, mode, words, phrases, grammar, [dict(m) for m in missed or []], function, error_note
-            )
-        )
+        return practice().log_attempt(sentence_fa, mode, words, phrases, grammar, missed, function, error_note)
 
 
 @mcp.tool(description="How the learner is doing: items by state, shaky items, functions open and done, accuracy. Call it when the learner asks about their progress.")
 def get_progress() -> ProgressResult:
     with _lock:
-        return ProgressResult.model_validate(practice().get_progress())
+        return practice().get_progress()
 
 
 def build_app():

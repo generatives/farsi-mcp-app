@@ -1,34 +1,35 @@
 from datetime import timedelta
 
 from app.db import Database
+from app.models import Missed
 from app.practice import Practice
 from tests.conftest import run_exercise
 
 
 def play_session(p, clock, n=None, missed_for=None):
     r = p.start_session()
-    queue = list(r["exercises"])
+    queue = list(r.exercises)
     done = 0
     while queue and (n is None or done < n):
         ex = queue.pop(0)
         missed = missed_for(ex) if missed_for else None
         res = run_exercise(p, ex, clock, missed)
         done += 1
-        if res.get("next") and not res["next"].get("extra"):
-            queue.append(res["next"])
-        if res.get("done"):
+        if res.next and not res.next.extra:
+            queue.append(res.next)
+        if res.done:
             break
     return r, done
 
 
 def test_day_one_introduces_greetings_and_stage_0_grammar(practice):
     r = practice.start_session()
-    names = r["plan"]["something_new"]["new_items"]
+    names = r.plan.something_new.new_items
     assert names[0].startswith("سلام")
     assert any(n.startswith("G1") for n in names)
-    first = r["exercises"][0]
-    assert first["mode"] == "repeat" and first["first_encounter"] == "step 1 of 3"
-    assert len(r["exercises"]) == 3
+    first = r.exercises[0]
+    assert first.mode == "repeat" and first.first_encounter == "step 1 of 3"
+    assert len(r.exercises) == 3
 
 
 def test_first_encounter_unlocks_and_budget_ends_session(practice, clock):
@@ -42,14 +43,14 @@ def test_first_encounter_unlocks_and_budget_ends_session(practice, clock):
 def test_locked_ids_are_ignored(practice, clock):
     practice.start_session()
     res = practice.log_attempt("مادر", "say", words=["w.madar"])
-    assert res["logged"] == []
-    assert res["ignored"][0]["id"] == "w.madar"
+    assert res.logged == []
+    assert res.ignored[0].id == "w.madar"
 
 
 def test_replay_rebuilds_the_same_state(practice, clock, db, cur):
     play_session(practice, clock)
     clock.advance(days=2)
-    play_session(practice, clock, missed_for=lambda ex: [{"id": ex["target"]["id"], "outcome": "helped"}])
+    play_session(practice, clock, missed_for=lambda ex: [Missed(id=ex.target.id, outcome="helped")])
     again = Practice(cur, db, clock=clock)
     for i, st in practice.learner.items.items():
         other = again.learner.items[i]
@@ -68,7 +69,7 @@ def test_levels_move_up_over_days_and_down_on_wrong(practice, clock):
         practice.log_attempt("سلام", mode, phrases=["p.salam"])
     assert L.level("p.salam") == 1
     clock.advance(seconds=30)
-    practice.log_attempt("سلام", "say", phrases=["p.salam"], missed=[{"id": "p.salam", "outcome": "wrong"}])
+    practice.log_attempt("سلام", "say", phrases=["p.salam"], missed=[Missed(id="p.salam", outcome="wrong")])
     assert L.level("p.salam") == 0
 
 
@@ -76,9 +77,9 @@ def test_due_reviews_come_back_inside_scenes(practice, clock):
     play_session(practice, clock)
     clock.advance(days=3)
     r = practice.start_session()
-    assert r["plan"]["scene_exercises"] > 0
-    first_scene = next(ex for ex in r["exercises"] if ex["part"] == "scene")
-    assert "new_scene" in first_scene
+    assert r.plan.scene_exercises > 0
+    first_scene = next(ex for ex in r.exercises if ex.part == "scene")
+    assert first_scene.new_scene is not None
 
 
 def test_one_hard_thing_per_sentence(practice, clock):
@@ -86,8 +87,8 @@ def test_one_hard_thing_per_sentence(practice, clock):
     clock.advance(days=3)
     r = practice.start_session()
     for ex in practice.session.queue:
-        if ex["part"] == "scene" and practice.learner.level(ex["target"]["id"]) <= 1:
-            assert ex["include"] == []
+        if ex.part == "scene" and practice.learner.level(ex.target.id) <= 1:
+            assert ex.include == []
 
 
 def test_mission_marks_function_done(practice, clock, cur):
@@ -95,22 +96,22 @@ def test_mission_marks_function_done(practice, clock, cur):
     practice.start_session()
     f = cur.functions["f.thank"]
     res = practice.log_attempt("نه، ممنون… دستت درد نکنه", "mission", phrases=[], function=f.id)
-    assert res["mission_passed"] and L.function_done(f.id)
+    assert res.mission_passed and L.function_done(f.id)
 
 
 def test_progress_reports_functions(practice, clock):
     play_session(practice, clock, n=5)
     prog = practice.get_progress()
-    assert {f["function"] for f in prog["functions"]} >= {"Greet and say goodbye"}
-    assert prog["by_state"]["introduced"]
+    assert {f.function for f in prog.functions} >= {"Greet and say goodbye"}
+    assert prog.by_state["introduced"]
 
 
 def test_known_vocabulary_lists_met_words_and_phrases(practice, clock):
-    assert practice.start_session()["known_vocabulary"] == []
+    assert practice.start_session().known_vocabulary == []
     play_session(practice, clock)
     clock.advance(days=2)
-    vocab = practice.start_session()["known_vocabulary"]
-    ids = {v["id"] for v in vocab}
+    vocab = practice.start_session().known_vocabulary
+    ids = {v.id for v in vocab}
     assert 0 < len(vocab) <= 60
     assert "p.salam" in ids  # set phrases count as vocabulary
     assert all(practice.learner.unlocked(i) for i in ids)
@@ -121,25 +122,26 @@ def test_easy_words_include_set_phrases(practice, clock):
     play_session(practice, clock)
     clock.advance(days=2)
     practice.start_session()
-    easy = {w["id"] for ex in practice.session.queue for w in ex["easy_words"]}
+    easy = {w.id for ex in practice.session.queue for w in ex.easy_words}
     assert any(i.startswith("p.") for i in easy)
 
 
-def test_every_tool_result_matches_its_output_schema(practice, clock):
-    """The server validates each result against app.models (extra fields forbidden), so check them all here."""
+def test_results_round_trip_through_their_schemas(practice, clock):
+    """What the server sends (optional nulls left out) must parse back against the published schema."""
     from app.models import LogAttemptResult, NextItemsResult, ProgressResult, StartSessionResult
 
     real_log = practice.log_attempt
 
     def checked_log(*args, **kwargs):
         res = real_log(*args, **kwargs)
-        LogAttemptResult.model_validate(res)
+        LogAttemptResult.model_validate(res.model_dump())
         return res
 
     practice.log_attempt = checked_log
+    wrong = lambda ex: [Missed(id=ex.target.id, outcome="wrong")]  # noqa: E731
     for day in range(12):
-        r, _ = play_session(practice, clock, missed_for=(lambda ex: [{"id": ex["target"]["id"], "outcome": "wrong"}]) if day % 4 == 3 else None)
-        StartSessionResult.model_validate(r)
-        NextItemsResult.model_validate(practice.next_items(5))
-        ProgressResult.model_validate(practice.get_progress())
+        r, _ = play_session(practice, clock, missed_for=wrong if day % 4 == 3 else None)
+        StartSessionResult.model_validate(r.model_dump())
+        NextItemsResult.model_validate(practice.next_items(5).model_dump())
+        ProgressResult.model_validate(practice.get_progress().model_dump())
         clock.advance(days=1)

@@ -72,6 +72,25 @@ class FunctionState:
 
 
 @dataclass
+class Changes:
+    """What one attempt changed: items that moved up a state, and items that just became leeches."""
+
+    moved_up: list[str]
+    new_leeches: list[str]
+
+
+@dataclass
+class Gate:
+    """Whether new material is allowed today, and why."""
+
+    open: bool
+    forecast_seconds: int
+    load_limit_seconds: int
+    accuracy: float | None
+    headroom_seconds: float
+
+
+@dataclass
 class Attempt:
     at: datetime
     session_id: int
@@ -95,7 +114,7 @@ class Learner:
 
     # ----- replay -----
 
-    def apply(self, review: Review) -> dict:
+    def apply(self, review: Review) -> Changes:
         """Fold one attempt into the state. Returns what changed, for the tool response."""
         moved_up: list[str] = []
         new_leeches: list[str] = []
@@ -131,7 +150,7 @@ class Learner:
             self._mission(self.functions[review.function_id], review)
 
         self.attempts.append(Attempt(review.at, review.session_id, mode, len(review.items), worst(non_first)))
-        return {"moved_up": moved_up, "new_leeches": new_leeches}
+        return Changes(moved_up, new_leeches)
 
     def _progress(self, st: ItemState, mode: str, outcome: str, day: date) -> None:
         after_first_day = day > local_day(st.first_at)
@@ -285,16 +304,16 @@ class Learner:
         spa, ipa = self.seconds_per_attempt(), self.items_per_attempt()
         return statistics.mean(n / ipa * spa for n in per_day)
 
-    def gate(self, now: datetime) -> dict:
+    def gate(self, now: datetime) -> Gate:
         budget = settings.BUDGET_MINUTES * 60
         forecast = self.forecast_mean_seconds(now)
         accuracy = self.accuracy()
         load_ok = forecast < settings.LOAD_SHARE * budget
         accuracy_ok = accuracy is None or accuracy >= settings.ACCURACY_FLOOR
-        return {
-            "open": load_ok and accuracy_ok,
-            "forecast_seconds": round(forecast),
-            "load_limit_seconds": round(settings.LOAD_SHARE * budget),
-            "accuracy": None if accuracy is None else round(accuracy, 2),
-            "headroom_seconds": max(0.0, settings.LOAD_SHARE * budget - forecast),
-        }
+        return Gate(
+            open=load_ok and accuracy_ok,
+            forecast_seconds=round(forecast),
+            load_limit_seconds=round(settings.LOAD_SHARE * budget),
+            accuracy=None if accuracy is None else round(accuracy, 2),
+            headroom_seconds=max(0.0, settings.LOAD_SHARE * budget - forecast),
+        )
