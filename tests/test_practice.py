@@ -1,6 +1,3 @@
-from datetime import timedelta
-
-from app.db import Database
 from app.models import Missed
 from app.practice import Practice
 from tests.conftest import run_exercise
@@ -85,7 +82,7 @@ def test_due_reviews_come_back_inside_scenes(practice, clock):
 def test_one_hard_thing_per_sentence(practice, clock):
     play_session(practice, clock)
     clock.advance(days=3)
-    r = practice.start_session()
+    practice.start_session()
     for ex in practice.session.queue:
         if ex.part == "scene" and practice.learner.level(ex.target.id) <= 1:
             assert ex.include == []
