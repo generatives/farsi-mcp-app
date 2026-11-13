@@ -29,7 +29,10 @@ def _edit(path, fn):
         ("phrases.yaml", lambda d: d[0].update(tags=["dancing"]), "not in the topic list"),
         ("functions.yaml", lambda d: d[0]["phrases"].append("p.nope"), "unknown set phrase"),
         ("grammar.yaml", lambda d: d[1].update(id="g.to-be"), "duplicate id"),
-        ("words/tier1.yaml", lambda d: d[0].update(pos="verbish"), "unknown part of speech"),
+        ("words/tier1.yaml", lambda d: d[0].update(pos="verbish"), r"w\.man\.pos: Input should be 'noun'"),
+        ("grammar.yaml", lambda d: d[0].update(stage="zero"), r"g\.to-be\.stage: Input should be a valid integer"),
+        ("phrases.yaml", lambda d: d[0].update(colour="red"), r"p\.salam\.colour: Extra inputs are not permitted"),
+        ("phrases.yaml", lambda d: d[0].pop("en"), r"p\.salam\.en: Field required"),
         ("words/tier1.yaml", lambda d: d[0].update(id="x.man"), "must start with w."),
     ],
 )

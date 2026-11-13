@@ -42,7 +42,6 @@ words; if you need one, give its meaning. Use only the learner's known grammar, 
 carries new_scene, bridge to it in a sentence ("Later that evening, at your aunt's…").
 - Session shape: a short warm-up, the scenes, then something new. Keep your own talk brief; the learner \
 should be speaking most of the time.
-- In the very first session, start with a minute on the sounds English lacks (kh, q, the long â).
 """
 
 RUBRIC = """\
