@@ -4,7 +4,7 @@
 # ("Deploy" → "Run workflow") and type the branch name. Either way it deploys to the one
 # production service; the next merge to main puts main back.
 #
-# One-time setup (Google Cloud and the PRD environment's variables) is in the README.
+# Settings come from the PRD environment (see the README, 'Deploy').
 name: Deploy
 
 on:
@@ -70,7 +70,7 @@ jobs:
             [ -n "$(printenv $name)" ] || missing="$missing $name"
           done
           if [ -n "$missing" ]; then
-            echo "::error::The PRD environment is missing:$missing (see the README, 'Automatic deploys')"
+            echo "::error::The PRD environment is missing:$missing (see the README, 'Deploy')"
             exit 1
           fi
 
