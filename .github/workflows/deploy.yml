@@ -50,7 +50,7 @@ jobs:
       contents: read
       id-token: write # lets GitHub sign in to Google Cloud without a stored key
     env:
-      SERVICE: farsi-mcp
+      SERVICE: farsi-mcp-app
       REGION: ${{ vars.GCP_REGION }}
       PROJECT: ${{ vars.GCP_PROJECT }}
     steps:
@@ -84,7 +84,7 @@ jobs:
       - name: Build and push the image
         id: image
         run: |
-          image="$REGION-docker.pkg.dev/$PROJECT/farsi-mcp/farsi-mcp:$(git rev-parse HEAD)"
+          image="$REGION-docker.pkg.dev/$PROJECT/farsi-mcp-app/farsi-mcp-app:$(git rev-parse HEAD)"
           gcloud auth configure-docker "$REGION-docker.pkg.dev" --quiet
           docker build -t "$image" .
           docker push "$image"
@@ -94,7 +94,7 @@ jobs:
         id: deploy
         env:
           MCP_SECRET: ${{ secrets.MCP_SECRET }}
-          RUN_SA: farsi-mcp@${{ vars.GCP_PROJECT }}.iam.gserviceaccount.com
+          RUN_SA: farsi-mcp-app@${{ vars.GCP_PROJECT }}.iam.gserviceaccount.com
           LITESTREAM_BUCKET: ${{ vars.LITESTREAM_BUCKET }}
         run: |
           gcloud run deploy "$SERVICE" \

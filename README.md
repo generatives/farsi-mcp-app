@@ -55,7 +55,7 @@ npx @modelcontextprotocol/inspector   # connect with transport "Streamable HTTP"
 ## Deploy
 
 `.github/workflows/deploy.yml` runs the tests, builds the image, pushes it to Artifact Registry, deploys it to
-the `farsi-mcp` Cloud Run service, and checks that the server lists its four tools.
+the `farsi-mcp-app` Cloud Run service, and checks that the server lists its four tools.
 
 - **On merge to main:** it runs by itself.
 - **Any other branch:** open **Actions → Deploy → Run workflow**, type the branch name in the box and run it. It
