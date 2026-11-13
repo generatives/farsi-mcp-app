@@ -122,7 +122,7 @@ class Learner:
             st = self.items.get(item_id)
             if st is None:
                 st = self.items[item_id] = ItemState(item_id, Card(due=review.at), first_at=review.at)
-            first_exposure = st.attempts < settings.FIRST_EXPOSURES
+            first_exposure = local_day(review.at) == local_day(st.first_at)  # the day it was introduced
             st.attempts += 1
             st.card, _ = self.scheduler.review_card(st.card, RATINGS[outcome], review.at)
             before_level = st.level

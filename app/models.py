@@ -13,7 +13,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_serializer
 
 Mode = Literal["repeat", "hear", "cued", "say", "situation", "respond", "mission"]
 Outcome = Literal["correct", "helped", "wrong"]
-Part = Literal["warm-up", "scene", "something new", "extra"]
+Part = Literal["warm-up", "new", "review", "mission", "extra"]
 State = Literal["introduced", "recognizes", "produces with help", "produces freely"]
 
 
@@ -70,7 +70,7 @@ class Scene(Strict):
 
 
 class Exercise(Strict):
-    exercise: int | None = Field(None, description="Position in today's plan.")
+    exercise: int | None = Field(None, description="Number of this exercise in the session.")
     part: Part
     mode: Mode
     instruction: str
@@ -82,8 +82,7 @@ class Exercise(Strict):
     carry_with: str | None = None
     note: str | None = None
     new_scene: Scene | None = Field(None, description="Present when this exercise starts a new scene: bridge to it.")
-    first_encounter: str | None = None
-    extra: bool | None = None
+    new_step: str | None = Field(None, description="For a new item: which step of its ladder this is.")
 
 
 class Summary(Strict):
@@ -95,33 +94,20 @@ class Summary(Strict):
     attempts_so_far: int
 
 
-class SomethingNew(Strict):
-    gate_open: bool
-    mission: str | None
-    new_items: list[str]
-
-
-class Plan(Strict):
-    warm_up: int
-    scene_exercises: int
-    scenes: list[Scene]
-    something_new: SomethingNew
-
-
 class StartSessionResult(Strict):
     session_id: int
     summary: Summary
     seconds_left: int
-    plan: Plan
     known_grammar: list[str]
     known_vocabulary: list[VocabEntry] = Field(description="The learner's best-known words and set phrases.")
     grammar_in_flight: list[str]
-    exercises: list[Exercise]
+    new_today: list[str] = Field(description="New items this session may introduce, in order.")
+    exercise: Exercise | None = Field(description="The first exercise.")
     note: str
 
 
-class NextItemsResult(Strict):
-    exercises: list[Exercise]
+class SkipResult(Strict):
+    exercise: Exercise | None
     seconds_left: int
 
 
