@@ -15,10 +15,28 @@ rules); Claude turns each planned exercise into a natural spoken exchange and gr
 
 | Tool | What it does |
 | --- | --- |
-| `start_session` | Starts a session: summary, today's plan (warm-up, scenes, something new), and the first three exercises |
+| `start_session` | Starts a session: summary, known grammar and vocabulary, the new items it may introduce, and the first exercise |
 | `log_attempt` | Logs one graded exercise and returns the next one |
-| `next_items` | More exercises without logging, for a skipped exercise or extra practice |
+| `skip_exercise` | Sets the current exercise aside without logging it and returns a different one |
 | `get_progress` | Items by level, functions open and done, accuracy |
+
+## How a session runs
+
+There's no plan made in advance. Each time Claude logs an attempt, the server picks the next exercise from what
+has happened so far, in this order:
+
+1. **A new item due back.** A new item comes back on a short ladder within its first session: Claude introduces
+   it and you repeat it, then 2 exercises later you hear it, 4 later you say it with a cue, 8 later you say it
+   without one, and once more later on. A miss sends it back two steps. In the last two minutes, unfinished
+   ladders get their next step.
+2. **Warm-up.** At the start, up to two of your best-known items.
+3. **A mission**, when a function's mission is ready and nothing new is mid-ladder.
+4. **Something new**, while fewer than two new items are still on the first three steps of their ladder.
+   At most 5 new items a day, and the Stage 0 grammar patterns come one a day.
+5. **A due review**, the item you're closest to forgetting first.
+6. Otherwise a new item early, or extra practice.
+
+Exercises happen inside a scene, which lasts at least six exercises before it can change.
 
 ## Layout
 
@@ -26,7 +44,7 @@ rules); Claude turns each planned exercise into a natural spoken exchange and gr
 | --- | --- |
 | `app/server.py` | MCP server, tool definitions, server instructions and the grading rubric |
 | `app/practice.py` | Sessions, logging attempts, progress |
-| `app/planner.py` | Plans a session: warm-up, scenes grouped by function, first encounters, one hard thing per sentence |
+| `app/planner.py` | Picks each exercise when it's needed: new items climbing their ladder, warm-up, missions, new items, due reviews |
 | `app/engine.py` | Rebuilds learner state by replaying the log: FSRS cards, levels, unlocks, stages, functions, gates |
 | `app/curriculum.py` | Loads and validates `curriculum/` |
 | `app/db.py` | The SQLite log: `sessions`, `reviews`, `review_items` |
