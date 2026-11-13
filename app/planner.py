@@ -28,7 +28,7 @@ MIXES = {
 INSTRUCTIONS = {
     "repeat": "First encounter, step 1 of 3. Say a short sentence using the target, give its meaning in English, and ask the learner to repeat it.",
     "hear": "Say a sentence in Persian only, using the target. The learner gives the meaning in English.",
-    "cued": "Give the English for a sentence using the target, plus a Persian cue (the target itself, or the key form). The learner says it in Persian.",
+    "cued": "Give the English for a sentence using the target, plus a cue in Persian script (the target itself, or the key form). The learner says it in Persian.",
     "say": "Give only the English for a sentence using the target. The learner says it in Persian.",
     "situation": "Describe a moment in the scene in English so the target comes naturally. The learner says what fits, in Persian. If they answer well without the target, say so and nudge once toward it by meaning, never by grammar name.",
     "respond": "Play someone in the scene and say one line in Persian that invites the target. The learner understands it and replies in Persian. If they answer well without the target, say so and nudge once toward it by meaning.",
@@ -59,10 +59,10 @@ class Planner:
         level = self.learner.level(item_id)
         out = Item(id=item_id, kind=item.kind, state=LEVEL_NAMES[level] if level >= 0 else None)
         if item.kind == "word":
-            out.fa, out.translit, out.en, out.part_of_speech = item.fa, item.translit, item.en, item.pos
+            out.fa, out.en, out.part_of_speech = item.fa, item.en, item.pos
             out.forms = item.forms or None
         elif item.kind == "phrase":
-            out.fa, out.translit, out.en = item.fa, item.translit, item.en
+            out.fa, out.en = item.fa, item.en
             if item.slot:
                 out.slot = f"The … takes one easy {item.slot}."
         elif item.kind == "grammar":
