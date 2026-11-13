@@ -36,7 +36,6 @@ class Item(Strict):
     state: State | None = Field(None, description="How well the learner knows it. Absent for new items.")
     # words and set phrases
     fa: str | None = None
-    translit: str | None = Field(None, description="Use only when the learner asks for spelling or transliteration.")
     en: str | None = None
     part_of_speech: str | None = None
     forms: dict[str, str] | None = None

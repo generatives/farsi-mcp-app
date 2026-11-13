@@ -41,3 +41,11 @@ def test_validation_refuses_broken_files(tmp_path, file, change, message):
     _edit(d / file, change)
     with pytest.raises(curriculum.CurriculumError, match=message):
         curriculum.load(str(d))
+
+
+def test_curriculum_text_has_no_transliteration(cur):
+    """Claude reads this text and copies its style, so Persian in it must be in Persian script."""
+    for table in (cur.grammar, cur.functions, cur.phrases, cur.words):
+        for item in table.values():
+            for value in item.model_dump().values():
+                assert "â" not in str(value), f"{item.id}: transliterated Persian in {value!r}"

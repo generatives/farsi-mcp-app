@@ -15,13 +15,13 @@
 - id: f.thank
   label: F2
   order: 2
-  name: Thank, apologise, basic ta'ârof
+  name: Thank, apologise, basic تعارف
   needs: []
   phrases: [p.mamnun, p.bebakhshid, p.khahesh-mikonam, p.dastet-dard-nakone]
   core_words: []
   tags: [food, family]
   mission: >
-    The ta'ârof game at dinner: politely decline a second helping before
+    The تعارف game at dinner: politely decline a second helping before
     accepting it, and thank the host.
 
 - id: f.introduce

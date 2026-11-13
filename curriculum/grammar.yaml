@@ -8,8 +8,8 @@
   name: '"I am, you are, it is"'
   needs: []
   how: >
-    Endings -am, -i, -e (spoken) on a noun or adjective for "I am / you are / it is";
-    hast for "there is / he is (somewhere)", nist for "isn't".
+    Spoken endings ـَم، ـی، ـه on a noun or adjective for "I am / you are / it is";
+    هست for "there is / he is (somewhere)", نیست for "isn't".
   example: اسمم دکلنه.
   example_en: My name is Declan.
 
@@ -20,8 +20,8 @@
   name: '"My, your, his"'
   needs: [g.to-be]
   how: >
-    Possessive endings on the noun: -am (my), -et (your), -esh (his/her),
-    -emun (our), -etun (your, plural/polite), -eshun (their).
+    Possessive endings on the noun: ـَم (my), ـِت (your), ـِش (his/her),
+    ـِمون (our), ـِتون (your, plural/polite), ـِشون (their).
   example: کتابم کجاست؟
   example_en: Where's my book?
 
@@ -32,8 +32,8 @@
   name: Question words
   needs: [g.to-be, g.possessive]
   how: >
-    chi (what), ki (who), kojâ (where), key (when), chand (how many / how much),
-    chetor (how). In speech they usually come where the answer would go.
+    چی (what), کی (who), کجا (where), کِی (when), چند (how many / how much),
+    چطور (how). In speech they usually come where the answer would go.
   example: اسمت چیه؟
   example_en: What's your name?
 
@@ -41,11 +41,11 @@
   label: G4
   order: 4
   stage: 0
-  name: '"I have" (dâshtan, present)'
+  name: '"I have" (داشتن, present)'
   needs: []
   how: >
-    dâram, dâri, dâre, dârim, dârin, dâran ("have"), and nadâram... for
-    "don't have". No mi- in the present.
+    دارم، داری، داره، داریم، دارین، دارن ("have"), and ندارم… for
+    "don't have". No می‌ in the present.
   example: یه داداش دارم.
   example_en: I have a brother.
 
@@ -53,10 +53,10 @@
   label: G5
   order: 5
   stage: 0
-  name: Linking words with -e (ezâfe)
+  name: Linking words with ـِ (اضافه)
   needs: [g.to-be]
   how: >
-    An -e (after a vowel, -ye) links a noun to what describes or owns it:
-    dust-e man (my friend), khune-ye bozorg (a big house).
+    An ـِ (after a vowel, ـیِ) links a noun to what describes or owns it:
+    دوستِ من (my friend), خونه‌ی بزرگ (a big house).
   example: دوستِ منه.
   example_en: He's my friend.

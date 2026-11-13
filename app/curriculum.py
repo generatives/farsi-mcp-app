@@ -84,7 +84,6 @@ class Phrase(Entry):
     function: str
     order: int
     fa: str
-    translit: str
     en: str
     tags: list[str]
     slot: str | None = None
@@ -95,7 +94,6 @@ class Word(Entry):
     prefix: ClassVar[str] = "w."
 
     fa: str
-    translit: str
     en: str
     pos: Literal[tuple(POS_NEEDS)]  # type: ignore[valid-type]
     rank: int
