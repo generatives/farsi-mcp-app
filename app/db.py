@@ -1,74 +1,134 @@
-"""SQLite storage. The file lives on local disk; Litestream replicates it to Cloud Storage."""
+"""SQLite storage: a log of sessions and attempts, and nothing derived from it.
+
+The file lives on local disk; Litestream replicates it to Cloud Storage. All learner state
+(FSRS cards, levels, unlocks, function progress) is rebuilt in memory from this log.
+"""
+
+from __future__ import annotations
 
 import os
 import sqlite3
 from contextlib import contextmanager
-
-from app.words import WORDS
-
-DB_PATH = os.environ.get("DB_PATH", "/data/farsi.db")
+from dataclasses import dataclass
+from datetime import datetime
 
 SCHEMA = """
-CREATE TABLE IF NOT EXISTS words (
-    id INTEGER PRIMARY KEY,
-    fa TEXT NOT NULL UNIQUE,
-    translit TEXT NOT NULL,
-    en TEXT NOT NULL,
-    example_fa TEXT NOT NULL,
-    example_translit TEXT NOT NULL,
-    example_en TEXT NOT NULL
+CREATE TABLE IF NOT EXISTS sessions (
+    id         INTEGER PRIMARY KEY,
+    started_at TEXT NOT NULL,
+    ended_at   TEXT,
+    budget_s   INTEGER NOT NULL
 );
-CREATE TABLE IF NOT EXISTS served (
-    id INTEGER PRIMARY KEY,
-    word_id INTEGER NOT NULL REFERENCES words(id),
-    served_at TEXT NOT NULL DEFAULT (datetime('now'))
+CREATE TABLE IF NOT EXISTS reviews (
+    id          INTEGER PRIMARY KEY,
+    at          TEXT NOT NULL,
+    session_id  INTEGER NOT NULL REFERENCES sessions(id),
+    sentence_fa TEXT NOT NULL,
+    mode        TEXT NOT NULL CHECK (mode IN ('repeat', 'hear', 'cued', 'say', 'situation', 'respond', 'mission')),
+    error_note  TEXT,
+    function_id TEXT
+);
+CREATE TABLE IF NOT EXISTS review_items (
+    review_id INTEGER NOT NULL REFERENCES reviews(id),
+    item_id   TEXT NOT NULL,
+    outcome   TEXT NOT NULL CHECK (outcome IN ('correct', 'helped', 'wrong'))
 );
 """
 
 
-@contextmanager
-def connect():
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
-    try:
-        yield conn
-        conn.commit()
-    finally:
-        conn.close()
+@dataclass
+class Review:
+    id: int
+    at: datetime
+    session_id: int
+    sentence_fa: str
+    mode: str
+    error_note: str | None
+    function_id: str | None
+    items: list[tuple[str, str]]  # (item_id, outcome)
 
 
-def init_db() -> None:
-    os.makedirs(os.path.dirname(DB_PATH) or ".", exist_ok=True)
-    with connect() as conn:
+@dataclass
+class Session:
+    id: int
+    started_at: datetime
+    ended_at: datetime | None
+    budget_s: int
+
+
+class Database:
+    def __init__(self, path: str):
+        self.path = path
+        if path != ":memory:":
+            os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
+        self._conn = sqlite3.connect(path, check_same_thread=False)
+        self._conn.row_factory = sqlite3.Row
         # WAL mode is required by Litestream; busy_timeout avoids lock errors during its checkpoints.
-        conn.execute("PRAGMA journal_mode=WAL")
-        conn.execute("PRAGMA busy_timeout=5000")
-        conn.executescript(SCHEMA)
-        conn.executemany(
-            "INSERT OR IGNORE INTO words (fa, translit, en, example_fa, example_translit, example_en) "
-            "VALUES (?, ?, ?, ?, ?, ?)",
-            WORDS,
-        )
+        self._conn.execute("PRAGMA journal_mode=WAL")
+        self._conn.execute("PRAGMA busy_timeout=5000")
+        self._conn.executescript(SCHEMA)
+        self._conn.commit()
 
+    @contextmanager
+    def _tx(self):
+        try:
+            yield self._conn
+            self._conn.commit()
+        except Exception:
+            self._conn.rollback()
+            raise
 
-def pick_word() -> dict:
-    """Pick the least-recently-served word, record that it was served, and return it."""
-    with connect() as conn:
-        conn.execute("PRAGMA busy_timeout=5000")
-        row = conn.execute(
-            """
-            SELECT w.*, MAX(s.served_at) AS last_served, COUNT(s.id) AS times_served
-            FROM words w LEFT JOIN served s ON s.word_id = w.id
-            GROUP BY w.id
-            ORDER BY last_served IS NOT NULL, last_served, RANDOM()
-            LIMIT 1
-            """
-        ).fetchone()
-        conn.execute("INSERT INTO served (word_id) VALUES (?)", (row["id"],))
-        total = conn.execute("SELECT COUNT(*) FROM served").fetchone()[0]
-    return {
-        "word": {"fa": row["fa"], "translit": row["translit"], "en": row["en"]},
-        "example": {"fa": row["example_fa"], "translit": row["example_translit"], "en": row["example_en"]},
-        "times_served_before": row["times_served"],
-        "total_words_served": total,
-    }
+    def start_session(self, at: datetime, budget_s: int) -> Session:
+        with self._tx() as c:
+            cur = c.execute("INSERT INTO sessions (started_at, budget_s) VALUES (?, ?)", (at.isoformat(), budget_s))
+        return Session(cur.lastrowid, at, None, budget_s)
+
+    def end_session(self, session_id: int, at: datetime) -> None:
+        with self._tx() as c:
+            c.execute("UPDATE sessions SET ended_at = ? WHERE id = ? AND ended_at IS NULL", (at.isoformat(), session_id))
+
+    def sessions(self) -> list[Session]:
+        rows = self._conn.execute("SELECT * FROM sessions ORDER BY id").fetchall()
+        return [
+            Session(
+                r["id"],
+                datetime.fromisoformat(r["started_at"]),
+                datetime.fromisoformat(r["ended_at"]) if r["ended_at"] else None,
+                r["budget_s"],
+            )
+            for r in rows
+        ]
+
+    def add_review(
+        self,
+        at: datetime,
+        session_id: int,
+        sentence_fa: str,
+        mode: str,
+        items: list[tuple[str, str]],
+        function_id: str | None = None,
+        error_note: str | None = None,
+    ) -> Review:
+        with self._tx() as c:
+            cur = c.execute(
+                "INSERT INTO reviews (at, session_id, sentence_fa, mode, error_note, function_id) VALUES (?, ?, ?, ?, ?, ?)",
+                (at.isoformat(), session_id, sentence_fa, mode, error_note, function_id),
+            )
+            c.executemany(
+                "INSERT INTO review_items (review_id, item_id, outcome) VALUES (?, ?, ?)",
+                [(cur.lastrowid, item_id, outcome) for item_id, outcome in items],
+            )
+        return Review(cur.lastrowid, at, session_id, sentence_fa, mode, error_note, function_id, list(items))
+
+    def reviews(self) -> list[Review]:
+        """Every attempt with its items, oldest first."""
+        reviews: dict[int, Review] = {}
+        for r in self._conn.execute("SELECT * FROM reviews ORDER BY at, id"):
+            reviews[r["id"]] = Review(
+                r["id"], datetime.fromisoformat(r["at"]), r["session_id"], r["sentence_fa"], r["mode"],
+                r["error_note"], r["function_id"], [],
+            )
+        for r in self._conn.execute("SELECT review_id, item_id, outcome FROM review_items ORDER BY rowid"):
+            if r["review_id"] in reviews:
+                reviews[r["review_id"]].items.append((r["item_id"], r["outcome"]))
+        return list(reviews.values())

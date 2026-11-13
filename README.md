@@ -1,23 +1,46 @@
 # farsi-mcp-app
 
-A remote MCP server for practising spoken colloquial Persian with Claude. This is the
-**smoke-test version**: one tool, `get_practice_word`, to confirm a custom connector
-works in Claude's voice mode before building the full scheduler.
+A remote MCP server for practising spoken colloquial Persian with Claude, by voice. The
+server decides what to practise and when (spaced repetition with FSRS, levels, unlock
+rules); Claude turns each planned exercise into a natural spoken exchange and grades it.
 
 - Python, using the official MCP SDK (`mcp` 2.x), served over Streamable HTTP
-- SQLite on local disk, replicated to a Cloud Storage bucket with [Litestream](https://litestream.io)
+- Curriculum in reviewable YAML files under `curriculum/`, loaded and validated at startup
+- SQLite holds only a log of sessions and attempts; all learner state is rebuilt from it in memory
+- SQLite is replicated to a Cloud Storage bucket with [Litestream](https://litestream.io)
 - Runs on Google Cloud Run, max one instance
 - Auth: the endpoint lives at a secret path, `/mcp/<MCP_SECRET>`. Anyone with the full URL can use it, so keep it private.
+
+## Tools
+
+| Tool | What it does |
+| --- | --- |
+| `start_session` | Starts a session: summary, today's plan (warm-up, scenes, something new), and the first three exercises |
+| `log_attempt` | Logs one graded exercise and returns the next one |
+| `next_items` | More exercises without logging, for a skipped exercise or extra practice |
+| `get_progress` | Items by level, functions open and done, accuracy |
 
 ## Layout
 
 | File | What it does |
 | --- | --- |
-| `app/server.py` | MCP server and the `get_practice_word` tool |
-| `app/db.py` | SQLite schema, seeding, and the word picker (least recently served first) |
-| `app/words.py` | Eight seed words with example sentences |
+| `app/server.py` | MCP server, tool definitions, server instructions and the grading rubric |
+| `app/practice.py` | Sessions, logging attempts, progress |
+| `app/planner.py` | Plans a session: warm-up, scenes grouped by function, first encounters, one hard thing per sentence |
+| `app/engine.py` | Rebuilds learner state by replaying the log: FSRS cards, levels, unlocks, stages, functions, gates |
+| `app/curriculum.py` | Loads and validates `curriculum/` |
+| `app/db.py` | The SQLite log: `sessions`, `reviews`, `review_items` |
+| `app/settings.py` | Budget, accuracy floor, retention and the fixed rules |
+| `curriculum/` | The curriculum (see its README) |
 | `entrypoint.sh` | Restores the DB from the bucket, then runs the server under `litestream replicate -exec` |
 | `litestream.yml` | Points Litestream at `gs://$LITESTREAM_BUCKET/farsi.db` |
+
+## Tests
+
+```sh
+pip install -r requirements.txt -r requirements-dev.txt
+python -m pytest
+```
 
 ## Run locally
 
@@ -83,8 +106,9 @@ The deploy prints a service URL like `https://farsi-mcp-abc123-uc.a.run.app`.
 ## Add it to Claude
 
 In claude.ai, open **Settings → Connectors → Add custom connector**, and give it the URL
-`https://<service-url>/mcp/<MCP_SECRET>`. Then start a voice conversation and ask for a Persian word to practise.
-If Claude calls `get_practice_word`, the smoke test has passed.
+`https://<service-url>/mcp/<MCP_SECRET>`. Then start a voice conversation and say you'd like to practise Persian.
+Claude should call `start_session` and begin with the first exercise. If the connector was already added for the
+smoke test, it keeps working with the same URL; Claude picks up the new tools in a new conversation.
 
 ## Look at the data
 
@@ -93,5 +117,6 @@ litestream restore -o farsi.db gs://$BUCKET/farsi.db
 datasette farsi.db        # or open it in DB Browser for SQLite
 ```
 
-The `served` table logs every word the tool has handed out. If that history survives a redeploy,
-Litestream is working.
+`reviews` and `review_items` log every attempt, and `sessions` every session. Nothing else is stored:
+levels, schedules and unlocks are rebuilt from these at startup. The smoke test's `words` and `served`
+tables are left in place but no longer used.
