@@ -117,7 +117,6 @@ class StartSessionResult(Strict):
     known_grammar: list[str]
     known_vocabulary: list[VocabEntry] = Field(description="The learner's best-known words and set phrases.")
     grammar_in_flight: list[str]
-    leeches: list[str]
     exercises: list[Exercise]
     note: str
 
@@ -145,7 +144,6 @@ class Ignored(Strict):
 class LogAttemptResult(Strict):
     logged: list[Logged]
     moved_up: list[MovedUp]
-    new_leeches: list[str]
     seconds_left: int
     mission_passed: bool | None = None
     ignored: list[Ignored] | None = None

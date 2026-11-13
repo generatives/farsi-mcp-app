@@ -50,10 +50,6 @@ class ItemState:
     say_days: set = field(default_factory=set)
     free_days: set = field(default_factory=set)
 
-    @property
-    def leech(self) -> bool:
-        return self.lapses >= settings.LEECH_LAPSES
-
     def set_level(self, level: int) -> None:
         if level != self.level:
             self.level = level
@@ -73,10 +69,9 @@ class FunctionState:
 
 @dataclass
 class Changes:
-    """What one attempt changed: items that moved up a state, and items that just became leeches."""
+    """What one attempt changed: items that moved up a state."""
 
     moved_up: list[str]
-    new_leeches: list[str]
 
 
 @dataclass
@@ -117,7 +112,6 @@ class Learner:
     def apply(self, review: Review) -> Changes:
         """Fold one attempt into the state. Returns what changed, for the tool response."""
         moved_up: list[str] = []
-        new_leeches: list[str] = []
         non_first: list[str] = []
         day = local_day(review.at)
         mode = review.mode
@@ -131,7 +125,7 @@ class Learner:
             first_exposure = st.attempts < settings.FIRST_EXPOSURES
             st.attempts += 1
             st.card, _ = self.scheduler.review_card(st.card, RATINGS[outcome], review.at)
-            before_level, was_leech = st.level, st.leech
+            before_level = st.level
 
             if not first_exposure:
                 non_first.append(outcome)
@@ -143,14 +137,12 @@ class Learner:
             st.last_at, st.last_mode, st.last_outcome = review.at, mode, outcome
             if st.level > before_level:
                 moved_up.append(item_id)
-            if st.leech and not was_leech:
-                new_leeches.append(item_id)
 
         if mode == "mission" and review.function_id in self.functions:
             self._mission(self.functions[review.function_id], review)
 
         self.attempts.append(Attempt(review.at, review.session_id, mode, len(review.items), worst(non_first)))
-        return Changes(moved_up, new_leeches)
+        return Changes(moved_up)
 
     def _progress(self, st: ItemState, mode: str, outcome: str, day: date) -> None:
         after_first_day = day > local_day(st.first_at)
@@ -204,12 +196,9 @@ class Learner:
         end_of_today = datetime.combine(local_day(now) + timedelta(days=1), datetime.min.time(), settings.TIMEZONE)
         due = [
             i for i, st in self.items.items()
-            if not st.leech and st.card.due <= end_of_today and self.cur.is_schedulable(i)
+            if st.card.due <= end_of_today and self.cur.is_schedulable(i)
         ]
         return sorted(due, key=lambda i: self.retrievability(i, now))
-
-    def leeches(self) -> list[str]:
-        return [i for i, st in self.items.items() if st.leech and self.cur.is_schedulable(i)]
 
     def new_today(self, now: datetime) -> list[str]:
         today = local_day(now)
@@ -296,7 +285,7 @@ class Learner:
         today = local_day(now)
         per_day = [0] * 7
         for i, st in self.items.items():
-            if st.leech or not self.cur.is_schedulable(i):
+            if not self.cur.is_schedulable(i):
                 continue
             offset = max(0, (local_day(st.card.due) - today).days)
             if offset < 7:

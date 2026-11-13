@@ -220,7 +220,7 @@ class Planner:
         """
         L = self.learner
         rng = random.Random(session_id)
-        pool = [i for i in self._vocab() if L.unlocked(i) and not L.items[i].leech]
+        pool = [i for i in self._vocab() if L.unlocked(i)]
         rng.shuffle(pool)
         pool.sort(key=lambda i: (-L.level(i), -round(L.retrievability(i, now), 1)))
         return [self._entry(i) for i in pool[: settings.KNOWN_VOCABULARY_MAX]]
@@ -236,7 +236,7 @@ class Planner:
         out: list[Exercise] = []
 
         # Warm-up: the best-known items, for an easy win.
-        warm = sorted((i for i in L.items if L.level(i) == 3 and not L.items[i].leech),
+        warm = sorted((i for i in L.items if L.level(i) == 3),
                       key=lambda i: -L.retrievability(i, now))[: settings.WARMUP_MAX]
         for i in warm:
             mode = rng.choice(["say", "situation"])
@@ -349,7 +349,7 @@ class Planner:
         """Extra practice once the plan runs out: unlocked items not yet practised this session."""
         L = self.learner
         rng = random.Random(session_id * 7919 + len(exclude))
-        pool = sorted((i for i in L.items if i not in exclude and not L.items[i].leech and self.cur.is_schedulable(i)),
+        pool = sorted((i for i in L.items if i not in exclude and self.cur.is_schedulable(i)),
                       key=lambda i: L.retrievability(i, now))[:limit]
         out = []
         for i in pool:
