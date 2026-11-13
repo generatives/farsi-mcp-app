@@ -186,24 +186,45 @@ class Planner:
         best = max(open_fns, key=lambda f: (sum(tags[t] for t in f.tags), -f.order), default=None)
         return best if best and sum(tags[t] for t in best.tags) > 0 else None
 
-    def easy_words(self, now: datetime, scene: dict, exclude: set[str]) -> list[str]:
-        L = self.learner
+    def _vocab(self) -> dict:
+        """Words and set phrases, the two kinds Claude can use as filler."""
+        return {**self.cur.words, **self.cur.phrases}
+
+    def _entry(self, item_id: str) -> dict:
+        item = self._vocab()[item_id]
+        return {"id": item_id, "fa": item.fa, "en": item.en}
+
+    def easy_words(self, now: datetime, scene: dict, exclude: set[str]) -> list[dict]:
+        """Up to 15 well-known words and set phrases that fit the scene."""
+        L, vocab = self.learner, self._vocab()
         scene_tags = set()
         if scene.get("function"):
             scene_tags = set(self.cur.functions[scene["function"]].tags)
         recent = now - timedelta(days=3)
         good = [
-            w for w in self.cur.words
-            if L.unlocked(w) and w not in exclude and (
-                L.level(w) >= 3 or (L.items[w].last_outcome == "correct" and L.items[w].last_at >= recent)
+            i for i in vocab
+            if L.unlocked(i) and i not in exclude and (
+                L.level(i) >= 3 or (L.items[i].last_outcome == "correct" and L.items[i].last_at >= recent)
             )
         ]
-        fitting = [w for w in good if not self.cur.words[w].tags or scene_tags & set(self.cur.words[w].tags)]
-        chosen = (fitting + [w for w in good if w not in fitting])[: settings.EASY_WORDS_MAX]
+        fitting = [i for i in good if not vocab[i].tags or scene_tags & set(vocab[i].tags)]
+        chosen = (fitting + [i for i in good if i not in fitting])[: settings.EASY_WORDS_MAX]
         if len(chosen) < 5:
-            chosen += [w for w in self.cur.words if L.unlocked(w) and w not in exclude and w not in chosen][
-                : 5 - len(chosen)]
-        return [{"id": w, "fa": self.cur.words[w].fa, "en": self.cur.words[w].en} for w in chosen]
+            chosen += [i for i in vocab if L.unlocked(i) and i not in exclude and i not in chosen][: 5 - len(chosen)]
+        return [self._entry(i) for i in chosen]
+
+    def known_vocabulary(self, now: datetime, session_id: int) -> list[dict]:
+        """The learner's best-known words and set phrases, for the whole session.
+
+        Highest level first, then most likely to be remembered; ties are shuffled per session
+        so the list varies from day to day.
+        """
+        L = self.learner
+        rng = random.Random(session_id)
+        pool = [i for i in self._vocab() if L.unlocked(i) and not L.items[i].leech]
+        rng.shuffle(pool)
+        pool.sort(key=lambda i: (-L.level(i), -round(L.retrievability(i, now), 1)))
+        return [self._entry(i) for i in pool[: settings.KNOWN_VOCABULARY_MAX]]
 
     # ----- the whole session -----
 

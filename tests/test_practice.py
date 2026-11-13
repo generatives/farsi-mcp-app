@@ -103,3 +103,23 @@ def test_progress_reports_functions(practice, clock):
     prog = practice.get_progress()
     assert {f["function"] for f in prog["functions"]} >= {"Greet and say goodbye"}
     assert prog["by_state"]["introduced"]
+
+
+def test_known_vocabulary_lists_met_words_and_phrases(practice, clock):
+    assert practice.start_session()["known_vocabulary"] == []
+    play_session(practice, clock)
+    clock.advance(days=2)
+    vocab = practice.start_session()["known_vocabulary"]
+    ids = {v["id"] for v in vocab}
+    assert 0 < len(vocab) <= 60
+    assert "p.salam" in ids  # set phrases count as vocabulary
+    assert all(practice.learner.unlocked(i) for i in ids)
+    assert not any(i.startswith("g.") for i in ids)
+
+
+def test_easy_words_include_set_phrases(practice, clock):
+    play_session(practice, clock)
+    clock.advance(days=2)
+    practice.start_session()
+    easy = {w["id"] for ex in practice.session.queue for w in ex["easy_words"]}
+    assert any(i.startswith("p.") for i in easy)

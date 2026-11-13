@@ -32,9 +32,9 @@ and call log_attempt after each. Each log_attempt returns the next exercise.
 mangles transliteration. Use the translit field only when the learner asks how something is spelled or asks \
 for transliteration.
 - Use colloquial Tehrani forms (miram, not miravam).
-- Build sentences from the exercise's target, its include list and its easy_words. Avoid other Persian words \
-the learner hasn't met; if you need one, give its meaning. Use only the learner's known grammar, plus the \
-target.
+- Build sentences from the exercise's target, its include list and its easy_words, plus the session's \
+known_vocabulary from start_session (the learner's best-known words and set phrases). Avoid other Persian \
+words; if you need one, give its meaning. Use only the learner's known grammar, plus the target.
 - One hard thing per sentence: the target is what's being tested. Keep everything else easy.
 - Never decide that something new is unlocked; only the server does that.
 - Never name a grammar pattern ("ezâfe", "subjunctive") to the learner unless they ask.

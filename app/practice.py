@@ -118,6 +118,7 @@ class Practice:
                 },
             },
             "known_grammar": [self.planner.name(g) for g in self.learner.known_grammar()],
+            "known_vocabulary": self.planner.known_vocabulary(now, s.id),
             "grammar_in_flight": [self.planner.name(g) for g in self.learner.grammar_in_flight()],
             "leeches": [self.planner.name(i) for i in self.learner.leeches()],
             "exercises": first,
