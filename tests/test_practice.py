@@ -123,3 +123,23 @@ def test_easy_words_include_set_phrases(practice, clock):
     practice.start_session()
     easy = {w["id"] for ex in practice.session.queue for w in ex["easy_words"]}
     assert any(i.startswith("p.") for i in easy)
+
+
+def test_every_tool_result_matches_its_output_schema(practice, clock):
+    """The server validates each result against app.models (extra fields forbidden), so check them all here."""
+    from app.models import LogAttemptResult, NextItemsResult, ProgressResult, StartSessionResult
+
+    real_log = practice.log_attempt
+
+    def checked_log(*args, **kwargs):
+        res = real_log(*args, **kwargs)
+        LogAttemptResult.model_validate(res)
+        return res
+
+    practice.log_attempt = checked_log
+    for day in range(12):
+        r, _ = play_session(practice, clock, missed_for=(lambda ex: [{"id": ex["target"]["id"], "outcome": "wrong"}]) if day % 4 == 3 else None)
+        StartSessionResult.model_validate(r)
+        NextItemsResult.model_validate(practice.next_items(5))
+        ProgressResult.model_validate(practice.get_progress())
+        clock.advance(days=1)

@@ -18,6 +18,7 @@ from mcp.server.transport_security import TransportSecuritySettings
 
 from app import curriculum, settings
 from app.db import Database
+from app.models import LogAttemptResult, NextItemsResult, ProgressResult, StartSessionResult
 from app.practice import Practice
 
 log = logging.getLogger("farsi")
@@ -99,15 +100,15 @@ def practice() -> Practice:
         "exercises to run in order."
     )
 )
-def start_session() -> dict:
+def start_session() -> StartSessionResult:
     with _lock:
-        return practice().start_session()
+        return StartSessionResult.model_validate(practice().start_session())
 
 
 @mcp.tool(description="Rarely needed: more planned exercises without logging an attempt, for example after a skipped exercise or for extra practice once the plan is done.")
-def next_items(limit: int = 3) -> dict:
+def next_items(limit: int = 3) -> NextItemsResult:
     with _lock:
-        return practice().next_items(max(1, min(limit, 10)))
+        return NextItemsResult.model_validate(practice().next_items(max(1, min(limit, 10))))
 
 
 @mcp.tool(description=RUBRIC)
@@ -120,18 +121,20 @@ def log_attempt(
     missed: list[Missed] | None = None,
     function: str | None = None,
     error_note: str | None = None,
-) -> dict:
+) -> LogAttemptResult:
     """sentence_fa is the Persian sentence (or, for a mission, the key line) in Persian script."""
     with _lock:
-        return practice().log_attempt(
-            sentence_fa, mode, words, phrases, grammar, [dict(m) for m in missed or []], function, error_note
+        return LogAttemptResult.model_validate(
+            practice().log_attempt(
+                sentence_fa, mode, words, phrases, grammar, [dict(m) for m in missed or []], function, error_note
+            )
         )
 
 
 @mcp.tool(description="How the learner is doing: items by state, shaky items, functions open and done, accuracy. Call it when the learner asks about their progress.")
-def get_progress() -> dict:
+def get_progress() -> ProgressResult:
     with _lock:
-        return practice().get_progress()
+        return ProgressResult.model_validate(practice().get_progress())
 
 
 def build_app():
