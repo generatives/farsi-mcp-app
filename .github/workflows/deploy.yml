@@ -1,0 +1,127 @@
+# Tests, builds and deploys the server to Cloud Run.
+#
+# Runs on every push to main. To deploy another branch, run it by hand from the Actions tab
+# ("Deploy" → "Run workflow") and type the branch name. Either way it deploys to the one
+# production service; the next merge to main puts main back.
+#
+# One-time setup (Google Cloud and the PRD environment's variables) is in the README.
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: Branch, tag or commit to deploy (leave empty for the branch picked above)
+        required: false
+        default: ""
+
+# One deploy at a time, and never cancel one halfway: only one instance may write the database.
+concurrency:
+  group: deploy-prd
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  REF: ${{ inputs.ref || github.ref }}
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.REF }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+      - run: pip install -r requirements.txt -r requirements-dev.txt
+      - run: python -m pytest -q
+
+  deploy:
+    needs: test
+    runs-on: ubuntu-latest
+    environment: PRD
+    permissions:
+      contents: read
+      id-token: write # lets GitHub sign in to Google Cloud without a stored key
+    env:
+      SERVICE: farsi-mcp
+      REGION: ${{ vars.GCP_REGION }}
+      PROJECT: ${{ vars.GCP_PROJECT }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.REF }}
+
+      - name: Check the PRD environment is set up
+        env:
+          MCP_SECRET: ${{ secrets.MCP_SECRET }}
+          WIF_PROVIDER: ${{ vars.GCP_WIF_PROVIDER }}
+          DEPLOY_SA: ${{ vars.GCP_DEPLOY_SA }}
+          LITESTREAM_BUCKET: ${{ vars.LITESTREAM_BUCKET }}
+        run: |
+          missing=""
+          for name in MCP_SECRET PROJECT REGION WIF_PROVIDER DEPLOY_SA LITESTREAM_BUCKET; do
+            [ -n "$(printenv $name)" ] || missing="$missing $name"
+          done
+          if [ -n "$missing" ]; then
+            echo "::error::The PRD environment is missing:$missing (see the README, 'Automatic deploys')"
+            exit 1
+          fi
+
+      - uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }}
+          service_account: ${{ vars.GCP_DEPLOY_SA }}
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      - name: Build and push the image
+        id: image
+        run: |
+          image="$REGION-docker.pkg.dev/$PROJECT/farsi-mcp/farsi-mcp:$(git rev-parse HEAD)"
+          gcloud auth configure-docker "$REGION-docker.pkg.dev" --quiet
+          docker build -t "$image" .
+          docker push "$image"
+          echo "image=$image" >> "$GITHUB_OUTPUT"
+
+      - name: Deploy to Cloud Run
+        id: deploy
+        env:
+          MCP_SECRET: ${{ secrets.MCP_SECRET }}
+          RUN_SA: farsi-mcp@${{ vars.GCP_PROJECT }}.iam.gserviceaccount.com
+          LITESTREAM_BUCKET: ${{ vars.LITESTREAM_BUCKET }}
+        run: |
+          gcloud run deploy "$SERVICE" \
+            --image "${{ steps.image.outputs.image }}" \
+            --region "$REGION" \
+            --service-account "$RUN_SA" \
+            --max-instances 1 \
+            --no-cpu-throttling \
+            --cpu-boost \
+            --memory 512Mi \
+            --set-env-vars "LITESTREAM_BUCKET=$LITESTREAM_BUCKET,MCP_SECRET=$MCP_SECRET" \
+            --labels "git-sha=$(git rev-parse --short=12 HEAD)" \
+            --quiet
+          url=$(gcloud run services describe "$SERVICE" --region "$REGION" --format 'value(status.url)')
+          echo "url=$url" >> "$GITHUB_OUTPUT"
+
+      - name: Check the server answers
+        env:
+          MCP_SECRET: ${{ secrets.MCP_SECRET }}
+          URL: ${{ steps.deploy.outputs.url }}
+        run: |
+          body=$(curl -sS --fail-with-body --retry 5 --retry-all-errors --max-time 60 \
+            -X POST "$URL/mcp/$MCP_SECRET" \
+            -H 'content-type: application/json' \
+            -H 'accept: application/json, text/event-stream' \
+            -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}')
+          for tool in start_session log_attempt next_items get_progress; do
+            echo "$body" | grep -q "\"$tool\"" || { echo "::error::tools/list is missing $tool"; exit 1; }
+          done
+          echo "Deployed $REF ($(git rev-parse --short HEAD)) to $URL" >> "$GITHUB_STEP_SUMMARY"
