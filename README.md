@@ -52,56 +52,28 @@ export MCP_SECRET=$(openssl rand -hex 24) DB_PATH=./farsi.db PORT=8080
 npx @modelcontextprotocol/inspector   # connect with transport "Streamable HTTP" to that URL
 ```
 
-## Deploy to Cloud Run
+## Deploy
 
-One-time setup. Pick a US region (`us-central1`, `us-east1` or `us-west1`) so the bucket sits in Cloud Storage's free tier.
+`.github/workflows/deploy.yml` runs the tests, builds the image, pushes it to Artifact Registry, deploys it to
+the `farsi-mcp-app` Cloud Run service, and checks that the server lists its four tools.
 
-```sh
-PROJECT=your-gcp-project
-REGION=us-central1
-BUCKET=$PROJECT-farsi-mcp
-gcloud config set project $PROJECT
-gcloud services enable run.googleapis.com cloudbuild.googleapis.com artifactregistry.googleapis.com
+- **On merge to main:** it runs by itself.
+- **Any other branch:** open **Actions → Deploy → Run workflow**, type the branch name in the box and run it. It
+  deploys to the same production service, so the next merge to main replaces it.
 
-# Bucket for the Litestream replica
-gcloud storage buckets create gs://$BUCKET --location=$REGION --uniform-bucket-level-access
+Deploys run one at a time and are never cancelled halfway, because only one instance may write the database.
+GitHub signs in to Google Cloud with Workload Identity Federation through the `PRD` environment, so no Google key
+is stored in GitHub. The PRD environment holds the secret `MCP_SECRET` and the variables `GCP_PROJECT`,
+`GCP_REGION`, `GCP_DEPLOY_SA`, `GCP_WIF_PROVIDER` and `LITESTREAM_BUCKET`.
 
-# Service account the container runs as, allowed to read and write that bucket only
-gcloud iam service-accounts create farsi-mcp
-SA=farsi-mcp@$PROJECT.iam.gserviceaccount.com
-gcloud storage buckets add-iam-policy-binding gs://$BUCKET \
-  --member=serviceAccount:$SA --role=roles/storage.objectAdmin
-
-# The secret path. Save it; it's part of the connector URL.
-MCP_SECRET=$(openssl rand -hex 24)
-echo $MCP_SECRET
-```
-
-Deploy (re-run this after every code change):
-
-```sh
-gcloud run deploy farsi-mcp \
-  --source . \
-  --region $REGION \
-  --service-account $SA \
-  --allow-unauthenticated \
-  --max-instances 1 \
-  --no-cpu-throttling \
-  --cpu-boost \
-  --memory 512Mi \
-  --set-env-vars LITESTREAM_BUCKET=$BUCKET,MCP_SECRET=$MCP_SECRET
-```
-
-Why these flags:
+Why the deploy uses these Cloud Run flags:
 
 - `--max-instances 1`: only one process ever writes the SQLite file.
 - `--no-cpu-throttling`: Litestream replicates in the background between requests, which needs CPU
   when no request is in flight. This switches to instance-based billing. A container that lives about
   30 minutes a day stays well inside the free tier.
 - `--cpu-boost`: shortens the cold start on the first tool call of a session.
-- `--allow-unauthenticated`: Claude calls the server from the internet; the secret path is the guard.
-
-The deploy prints a service URL like `https://farsi-mcp-abc123-uc.a.run.app`.
+- The service allows unauthenticated calls, because Claude calls it from the internet; the secret path is the guard.
 
 ## Add it to Claude
 
@@ -113,7 +85,7 @@ smoke test, it keeps working with the same URL; Claude picks up the new tools in
 ## Look at the data
 
 ```sh
-litestream restore -o farsi.db gs://$BUCKET/farsi.db
+litestream restore -o farsi.db gs://<LITESTREAM_BUCKET>/farsi.db
 datasette farsi.db        # or open it in DB Browser for SQLite
 ```
 
