@@ -1,0 +1,55 @@
+# Functions: things you can do in a conversation. They have no review card.
+# They group set phrases and core words, set the scenes, and end in a mission.
+# Only F1-F5 (the ones that need Stage 0 grammar only) are in this reduced set.
+
+- id: f.greet
+  label: F1
+  order: 1
+  name: Greet and say goodbye
+  needs: [g.to-be]
+  phrases: [p.salam, p.khubi, p.merci, p.khodahafez]
+  core_words: []
+  tags: [family, daily]
+  mission: Greet the family at the door, and say goodbye at the end of the visit.
+
+- id: f.thank
+  label: F2
+  order: 2
+  name: Thank, apologise, basic ta'ârof
+  needs: []
+  phrases: [p.mamnun, p.bebakhshid, p.khahesh-mikonam, p.dastet-dard-nakone]
+  core_words: []
+  tags: [food, family]
+  mission: >
+    The ta'ârof game at dinner: politely decline a second helping before
+    accepting it, and thank the host.
+
+- id: f.introduce
+  label: F3
+  order: 3
+  name: Introduce yourself
+  needs: [g.to-be, g.possessive, g.questions]
+  phrases: [p.khoshbakhtam]
+  core_words: [w.esm, w.kar, w.ahl]
+  tags: [family, work]
+  mission: Introduce yourself at a family dinner, and ask someone their name and where they're from.
+
+- id: f.ask
+  label: F4
+  order: 4
+  name: Ask simple questions
+  needs: [g.questions]
+  phrases: [p.chande, p.kojast]
+  core_words: [w.inja, w.unja, w.alan]
+  tags: [travel, shopping, city]
+  mission: Ask where things are at the airport, and how much a taxi costs.
+
+- id: f.family
+  label: F5
+  order: 5
+  name: Talk about family
+  needs: [g.have, g.ezafe]
+  phrases: []
+  core_words: [w.madar, w.pedar, w.dadash, w.abji, w.bachche]
+  tags: [family, home]
+  mission: Describe your family from a photo.

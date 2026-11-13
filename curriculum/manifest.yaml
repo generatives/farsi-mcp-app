@@ -1,0 +1,23 @@
+# Farsi practice curriculum. See the curriculum doc for the full plan:
+# https://claude.ai/artifact/JU468uZsGBx4cvPJ8UHE4P
+version: "0.1-reduced"
+notes: >
+  Reduced curriculum for a first 30 minutes of practice: the five Stage 0
+  grammar patterns (G1-G5), the five functions that need only them (F1-F5),
+  their set phrases, and about 50 hand-picked everyday words. Words are
+  hand-written, not yet imported from FrequencyWords, so rank is approximate.
+
+# The only topic tags allowed on words, set phrases and functions.
+topics:
+  - food
+  - family
+  - home
+  - travel
+  - shopping
+  - city
+  - time
+  - weather
+  - work
+  - feelings
+  - health
+  - daily

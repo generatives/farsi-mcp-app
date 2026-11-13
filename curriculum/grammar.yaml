@@ -1,0 +1,62 @@
+# Grammar patterns, in learning order. Labels G1..G22 match the curriculum doc.
+# example is a reference for Claude only; practice sentences are generated.
+
+- id: g.to-be
+  label: G1
+  order: 1
+  stage: 0
+  name: '"I am, you are, it is"'
+  needs: []
+  how: >
+    Endings -am, -i, -e (spoken) on a noun or adjective for "I am / you are / it is";
+    hast for "there is / he is (somewhere)", nist for "isn't".
+  example: اسمم دکلنه.
+  example_en: My name is Declan.
+
+- id: g.possessive
+  label: G2
+  order: 2
+  stage: 0
+  name: '"My, your, his"'
+  needs: [g.to-be]
+  how: >
+    Possessive endings on the noun: -am (my), -et (your), -esh (his/her),
+    -emun (our), -etun (your, plural/polite), -eshun (their).
+  example: کتابم کجاست؟
+  example_en: Where's my book?
+
+- id: g.questions
+  label: G3
+  order: 3
+  stage: 0
+  name: Question words
+  needs: [g.to-be, g.possessive]
+  how: >
+    chi (what), ki (who), kojâ (where), key (when), chand (how many / how much),
+    chetor (how). In speech they usually come where the answer would go.
+  example: اسمت چیه؟
+  example_en: What's your name?
+
+- id: g.have
+  label: G4
+  order: 4
+  stage: 0
+  name: '"I have" (dâshtan, present)'
+  needs: []
+  how: >
+    dâram, dâri, dâre, dârim, dârin, dâran ("have"), and nadâram... for
+    "don't have". No mi- in the present.
+  example: یه داداش دارم.
+  example_en: I have a brother.
+
+- id: g.ezafe
+  label: G5
+  order: 5
+  stage: 0
+  name: Linking words with -e (ezâfe)
+  needs: [g.to-be]
+  how: >
+    An -e (after a vowel, -ye) links a noun to what describes or owns it:
+    dust-e man (my friend), khune-ye bozorg (a big house).
+  example: دوستِ منه.
+  example_en: He's my friend.
