@@ -1,4 +1,7 @@
-"""Plans a session: warm-up, scenes and something new, as a queue of exercises for Claude.
+"""Picks each exercise when it's needed, from the learner's state and what happened so far this session.
+
+Order of preference: a new item due back on its ladder, a warm-up at the start, a ready mission,
+a new item (while fewer than two are still being learned), a due review, then extra practice.
 
 Everything Claude needs is spelled out in plain language. Ids are labels only, which Claude
 hands back in log_attempt.
@@ -26,7 +29,7 @@ MIXES = {
 }
 
 INSTRUCTIONS = {
-    "repeat": "First encounter, step 1 of 3. Say a short sentence using the target, give its meaning in English, and ask the learner to repeat it.",
+    "repeat": "Introduce the target: say it on its own, then in one short sentence, give the meaning in English, say the Persian once more, and ask the learner to repeat it.",
     "hear": "Say a sentence in Persian only, using the target. The learner gives the meaning in English.",
     "cued": "Give the English for a sentence using the target, plus a cue in Persian script (the target itself, or the key form). The learner says it in Persian.",
     "say": "Give only the English for a sentence using the target. The learner says it in Persian.",
@@ -36,7 +39,60 @@ INSTRUCTIONS = {
 }
 
 NEUTRAL_SCENE = Scene(function=None, theme="daily", setting="Chatting with a friend over tea")
-FIRST_ENCOUNTER: list[Mode] = ["repeat", "hear", "cued"]
+
+# A new item's ladder within its first session: (mode, exercises to wait since the last step).
+LADDER: list[tuple[Mode, int]] = [("repeat", 0), ("hear", 2), ("cued", 4), ("say", 8), ("say", 12)]
+STILL_LEARNING = 3  # an item on a step before this counts toward settings.LEARNING_MAX
+
+
+@dataclass
+class Rung:
+    """Where a new item is on its ladder: the step it does next, and when it was last practised."""
+
+    step: int
+    last: int  # the session's attempt count when it was last practised
+
+
+@dataclass
+class LiveSession:
+    """What's happened so far in the current session. Lives in memory only."""
+
+    id: int
+    started_at: datetime
+    budget_s: int
+    last_activity: datetime
+    new_queue: list[str]  # new items still to introduce, in order
+    mission: str | None  # a function whose mission is still to offer
+    handed_out: int = 0
+    logged: int = 0
+    practised: set[str] = field(default_factory=set)
+    passed: set[str] = field(default_factory=set)  # skipped reviews, not offered again this session
+    introduced: set[str] = field(default_factory=set)
+    learning: dict[str, Rung] = field(default_factory=dict)
+    scene: Scene | None = None
+    scene_since: int = 0  # handed_out when the current scene started
+    pending: Exercise | None = None
+    recent_modes: list[str] = field(default_factory=list)
+
+    def seconds_left(self, now: datetime) -> int:
+        return max(0, int(self.budget_s - (now - self.started_at).total_seconds()))
+
+    def still_learning(self) -> int:
+        return sum(r.step < STILL_LEARNING for r in self.learning.values())
+
+    def record(self, item_id: str, outcome: str) -> None:
+        """Move a new item along its ladder after an attempt: up on correct, same step on helped,
+        two steps back on wrong. It leaves the ladder after the last step."""
+        rung = self.learning.get(item_id)
+        if rung is None:
+            return
+        if outcome == "correct":
+            rung.step += 1
+        elif outcome == "wrong":
+            rung.step = max(0, rung.step - 2)
+        rung.last = self.logged
+        if rung.step >= len(LADDER):
+            del self.learning[item_id]
 
 
 @dataclass
@@ -107,7 +163,7 @@ class Planner:
         grammar: list[str] = []
         stage0 = [g.id for g in cur.grammar.values() if g.stage == 0 and not L.unlocked(g.id)]
         if stage0:
-            grammar = stage0  # Stage 0 patterns start together
+            grammar = stage0[:1]  # Stage 0 patterns start one a day, in order
         elif not L.grammar_in_flight():
             for g in cur.grammar.values():
                 if not L.unlocked(g.id) and L.stage_open(g.stage) and all(L.level(n) >= 2 for n in g.needs):
@@ -156,7 +212,7 @@ class Planner:
             for lane in lanes:
                 if lane:
                     order.append(lane.pop(0))
-        plan.new_items = order
+        plan.new_items = order[: max(0, settings.NEW_ITEMS_PER_DAY - len(L.new_today(now)))]
         return plan
 
     def _day_one_phrases(self) -> set[str]:
@@ -225,100 +281,115 @@ class Planner:
         pool.sort(key=lambda i: (-L.level(i), -round(L.retrievability(i, now), 1)))
         return [self._entry(i) for i in pool[: settings.KNOWN_VOCABULARY_MAX]]
 
-    # ----- the whole session -----
+    # ----- picking the next exercise -----
 
-    def plan_session(self, now: datetime, session_id: int, seconds: float) -> list[Exercise]:
-        L = self.learner
-        rng = random.Random(session_id)
-        spa = L.seconds_per_attempt()
-        recent_modes: list[str] = []
-        assigned: set[str] = set()
-        out: list[Exercise] = []
-
-        # Warm-up: the best-known items, for an easy win.
-        warm = sorted((i for i in L.items if L.level(i) == 3),
-                      key=lambda i: -L.retrievability(i, now))[: settings.WARMUP_MAX]
-        for i in warm:
-            mode = rng.choice(["say", "situation"])
-            out.append(self._exercise(i, mode, "warm-up", [], NEUTRAL_SCENE, now))
-            assigned.add(i)
-
+    def start(self, now: datetime, session_id: int, budget_s: int) -> LiveSession:
         new = self.new_material(now)
-        new_seconds = settings.NEW_MATERIAL_SECONDS if (new.new_items or new.mission) else 0
-        due = [i for i in L.due_items(now) if i not in assigned]
-        n_scene = max(0, int((seconds - len(out) * spa - new_seconds) // spa)) if due else 0
+        return LiveSession(session_id, now, budget_s, now, new_queue=list(new.new_items), mission=new.mission)
 
-        # Targets and their candidates: one hard thing per sentence.
-        raw: list[tuple[str, Mode, list[str]]] = []
-        for i in due:
-            if len(raw) >= n_scene:
-                break
-            if i in assigned:
-                continue
-            assigned.add(i)
-            mode = self.pick_mode(i, rng, recent_modes)
-            recent_modes.append(mode)
+    def next_exercise(self, now: datetime, s: LiveSession) -> Exercise | None:
+        ex = self._pick(now, s)
+        if ex is not None:
+            s.handed_out += 1
+            ex.exercise = s.handed_out
+            if ex.mode != "mission":
+                s.recent_modes.append(ex.mode)
+        s.pending = ex
+        return ex
+
+    def _pick(self, now: datetime, s: LiveSession) -> Exercise | None:
+        L = self.learner
+        rng = random.Random(s.id * 7919 + s.handed_out)
+        closing = s.seconds_left(now) <= settings.CLOSING_SECONDS
+
+        # 1. A new item due back on its ladder. Near the end, every unfinished one is due.
+        def overdue(i: str) -> int:
+            r = s.learning[i]
+            return s.logged - r.last - LADDER[r.step][1]
+
+        due_back = [i for i in s.learning if closing or overdue(i) >= 0]
+        if due_back:
+            return self._ladder_exercise(max(due_back, key=overdue), s, now)
+
+        # 2. Warm-up: a couple of the best-known items, for an easy start.
+        if s.handed_out < settings.WARMUP_MAX:
+            warm = sorted(
+                (i for i in L.items if L.level(i) == 3 and i not in s.practised and self.cur.is_schedulable(i)),
+                key=lambda i: -L.retrievability(i, now),
+            )
+            if warm:
+                return self._exercise(warm[0], rng.choice(["say", "situation"]), "warm-up", [], s, now)
+
+        # 3. A ready mission, once nothing new is mid-ladder.
+        if s.mission and s.still_learning() == 0:
+            f = self.cur.functions[s.mission]
+            s.mission = None
+            scene = self.scene_for(f)
+            s.scene, s.scene_since = scene, s.handed_out
+            return Exercise(
+                part="mission", mode="mission", instruction=INSTRUCTIONS["mission"],
+                target=self.describe(f.id), function=f.id, include=[], easy_words=[], new_scene=scene,
+            )
+
+        # 4. Something new, while fewer than LEARNING_MAX items are still being learned.
+        if s.new_queue and not closing and s.still_learning() < settings.LEARNING_MAX:
+            item_id = s.new_queue.pop(0)
+            s.learning[item_id] = Rung(step=0, last=s.logged)
+            s.introduced.add(item_id)
+            return self._ladder_exercise(item_id, s, now)
+
+        # 5. A due review, most at risk of being forgotten first.
+        due = [i for i in L.due_items(now) if i not in s.practised and i not in s.passed and i not in s.learning]
+        if due:
+            i = due[0]
             include: list[str] = []
             if L.level(i) >= 2 and self.cur.item(i).kind != "phrase":
-                include = [c for c in due if c not in assigned and L.level(c) >= 2][: settings.INCLUDE_MAX]
-                assigned.update(include)
-            raw.append((i, mode, include))
+                include = [c for c in due[1:] if L.level(c) >= 2][: settings.INCLUDE_MAX]
+            return self._exercise(i, self.pick_mode(i, rng, s.recent_modes), "review", include, s, now)
 
-        # Group into scenes by function.
-        open_fns = L.open_functions()
-        groups: dict[str | None, list] = {}
-        loose = []
-        for i, mode, include in raw:
-            f = self._function_fit([i, *include], open_fns)
-            if f is None and self.cur.item(i).kind == "grammar":
-                loose.append((i, mode, include))
-            else:
-                groups.setdefault(f.id if f else None, []).append((i, mode, include))
-        ranked = sorted((k for k in groups if k is not None), key=lambda k: -len(groups[k]))
-        scenes = [k for k in ranked[: settings.SCENES_MAX - 1] if len(groups[k]) >= 2] or ranked[:1]
-        neutral = [x for k, v in groups.items() if k not in scenes for x in v]
-        if loose:
-            target = scenes[0] if scenes else None
-            if target:
-                groups[target] += loose
-            else:
-                neutral += loose
-        ordered = [(self.scene_for(self.cur.functions[k]), groups[k]) for k in scenes]
-        if neutral:
-            ordered.append((self.scene_for(None), neutral))
+        # 6. Nothing due: bring a new item back early rather than wait.
+        if s.learning:
+            return self._ladder_exercise(max(s.learning, key=overdue), s, now)
 
-        for scene, items in ordered:
-            for n, (i, mode, include) in enumerate(items):
-                ex = self._exercise(i, mode, "scene", include, scene, now)
-                if n == 0:
-                    ex.new_scene = scene
-                out.append(ex)
+        # 7. Extra practice: unlocked items not yet practised this session.
+        pool = sorted(
+            (i for i in L.items if i not in s.practised and i not in s.passed and self.cur.is_schedulable(i)),
+            key=lambda i: L.retrievability(i, now),
+        )
+        if pool:
+            return self._exercise(pool[0], self.pick_mode(pool[0], rng, s.recent_modes), "extra", [], s, now)
+        return None
 
-        # Something new: a mission, then each new item's first encounter.
-        if new.mission:
-            f = self.cur.functions[new.mission]
-            out.append(Exercise(
-                part="something new", mode="mission", instruction=INSTRUCTIONS["mission"],
-                target=self.describe(f.id), function=f.id, include=[], easy_words=[],
-                new_scene=self.scene_for(f),
-            ))
-        # First encounters, three items at a time: all three repeat, then hear, then cued,
-        # so each item comes back after a short gap.
-        items = new.new_items
-        for start in range(0, len(items), 3):
-            group = items[start:start + 3]
-            for step, mode in enumerate(FIRST_ENCOUNTER, 1):
-                for i in group:
-                    ex = self._exercise(i, mode, "something new", [], self.scene_for(self.cur.function_of(i)), now)
-                    ex.first_encounter = f"step {step} of 3"
-                    if mode != "repeat":
-                        ex.instruction = f"First encounter, step {step} of 3. " + INSTRUCTIONS[mode]
-                    out.append(ex)
-        return out
+    def _ladder_exercise(self, item_id: str, s: LiveSession, now: datetime) -> Exercise:
+        step = s.learning[item_id].step
+        mode = LADDER[step][0]
+        ex = self._exercise(item_id, mode, "new", [], s, now)
+        ex.new_step = f"step {step + 1} of {len(LADDER)}"
+        if step == 0:
+            ex.instruction = "New item. " + INSTRUCTIONS["repeat"]
+        else:
+            ex.instruction = (
+                f"New item, step {step + 1} of {len(LADDER)}: the learner met it a few minutes ago. "
+                + INSTRUCTIONS[mode]
+            )
+        return ex
 
-    def _exercise(self, item_id: str, mode: Mode, part: Part, include: list[str], scene: Scene,
+    def _scene(self, item_id: str, s: LiveSession) -> tuple[Scene, bool]:
+        """The scene for this item. A scene lasts at least settings.SCENE_MIN_EXERCISES exercises; after
+        that it changes when the item belongs to a different situation."""
+        if s.scene is not None and s.handed_out - s.scene_since < settings.SCENE_MIN_EXERCISES:
+            return s.scene, False
+        f = self._function_fit([item_id], self.learner.open_functions())
+        if s.scene is not None and (f is None or s.scene.function == f.id):
+            return s.scene, False
+        s.scene = self.scene_for(f)
+        s.scene_since = s.handed_out
+        return s.scene, True
+
+    def _exercise(self, item_id: str, mode: Mode, part: Part, include: list[str], s: LiveSession,
                   now: datetime) -> Exercise:
         item = self.cur.item(item_id)
+        scene, changed = self._scene(item_id, s)
         ex = Exercise(
             part=part,
             mode=mode,
@@ -327,6 +398,7 @@ class Planner:
             include=[self.describe(c) for c in include],
             easy_words=self.easy_words(now, scene, {item_id, *include}),
             function=scene.function,
+            new_scene=scene if changed else None,
         )
         if include:
             ex.include_note = "Work in at most two of these, from the front of the list, only if they fit naturally."
@@ -344,16 +416,3 @@ class Planner:
             return None
         best = max(known, key=lambda g: (self.learner.level(g.id), -g.order))
         return best.name
-
-    def extra(self, now: datetime, exclude: set[str], limit: int, session_id: int) -> list[Exercise]:
-        """Extra practice once the plan runs out: unlocked items not yet practised this session."""
-        L = self.learner
-        rng = random.Random(session_id * 7919 + len(exclude))
-        pool = sorted((i for i in L.items if i not in exclude and self.cur.is_schedulable(i)),
-                      key=lambda i: L.retrievability(i, now))[:limit]
-        out = []
-        for i in pool:
-            ex = self._exercise(i, self.pick_mode(i, rng, []), "extra", [], self.scene_for(None), now)
-            ex.extra = True
-            out.append(ex)
-        return out

@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from collections import Counter
-from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from typing import Callable
 
@@ -12,7 +11,6 @@ from app.curriculum import Curriculum
 from app.db import Database
 from app.engine import LEVEL_NAMES, OUTCOME_RANK, Learner
 from app.models import (
-    Exercise,
     FunctionProgress,
     Ignored,
     Logged,
@@ -20,36 +18,17 @@ from app.models import (
     Missed,
     Mode,
     MovedUp,
-    NextItemsResult,
     NotYet,
-    Plan,
     ProgressResult,
-    SomethingNew,
+    SkipResult,
     StartSessionResult,
     Summary,
 )
-from app.planner import Planner
-
-LOOKAHEAD = 3  # start_session hands out this many; each log_attempt hands out one more
+from app.planner import LiveSession, Planner
 
 
 def utcnow() -> datetime:
     return datetime.now(timezone.utc)
-
-
-@dataclass
-class LiveSession:
-    id: int
-    started_at: datetime
-    budget_s: int
-    queue: list[Exercise]
-    handed_out: int = 0
-    last_activity: datetime | None = None
-    practised: set[str] = field(default_factory=set)
-    new_items: set[str] = field(default_factory=set)
-
-    def seconds_left(self, now: datetime) -> int:
-        return max(0, int(self.budget_s - (now - self.started_at).total_seconds()))
 
 
 class Practice:
@@ -70,30 +49,14 @@ class Practice:
             self.db.end_session(self.session.id, now)
         budget = settings.BUDGET_MINUTES * 60
         row = self.db.start_session(now, budget)
-        queue = self.planner.plan_session(now, row.id, budget)
-        live = LiveSession(row.id, now, budget, queue, last_activity=now)
-        live.new_items = {ex.target.id for ex in queue if ex.first_encounter}
-        for n, ex in enumerate(queue, 1):
-            ex.exercise = n
-        self.session = live
-        return live
+        self.session = self.planner.start(now, row.id, budget)
+        return self.session
 
     def _current(self, now: datetime) -> LiveSession:
         s = self.session
-        if s is None or (now - (s.last_activity or s.started_at)) > timedelta(minutes=settings.SESSION_IDLE_MINUTES):
+        if s is None or (now - s.last_activity) > timedelta(minutes=settings.SESSION_IDLE_MINUTES):
             s = self._new_session(now)
         return s
-
-    def _next(self, s: LiveSession, count: int) -> list[Exercise]:
-        """Hand out the next exercises, skipping review targets already practised this session."""
-        out = []
-        while len(out) < count and s.handed_out < len(s.queue):
-            ex = s.queue[s.handed_out]
-            s.handed_out += 1
-            if not ex.first_encounter and ex.mode != "mission" and ex.target.id in s.practised:
-                continue
-            out.append(ex)
-        return out
 
     def _summary(self, now: datetime) -> Summary:
         L = self.learner
@@ -110,42 +73,39 @@ class Practice:
     def start_session(self) -> StartSessionResult:
         now = self.clock()
         s = self._new_session(now)
-        first = self._next(s, LOOKAHEAD)
-        new_ids = dict.fromkeys(ex.target.id for ex in s.queue if ex.first_encounter)
-        mission = next((ex for ex in s.queue if ex.mode == "mission"), None)
+        new_today = [self.planner.name(i) for i in s.new_queue]
         return StartSessionResult(
             session_id=s.id,
             summary=self._summary(now),
             seconds_left=s.seconds_left(now),
-            plan=Plan(
-                warm_up=sum(ex.part == "warm-up" for ex in s.queue),
-                scene_exercises=sum(ex.part == "scene" for ex in s.queue),
-                scenes=[ex.new_scene for ex in s.queue if ex.new_scene and ex.part == "scene"],
-                something_new=SomethingNew(
-                    gate_open=self.learner.gate(now).open,
-                    mission=mission.target.name if mission else None,
-                    new_items=[self.planner.name(i) for i in new_ids],
-                ),
-            ),
             known_grammar=[self.planner.name(g) for g in self.learner.known_grammar()],
             known_vocabulary=self.planner.known_vocabulary(now, s.id),
             grammar_in_flight=[self.planner.name(g) for g in self.learner.grammar_in_flight()],
-            exercises=first,
+            new_today=new_today,
+            exercise=self.planner.next_exercise(now, s),
             note=(
-                "Run these exercises in order, one at a time, and call log_attempt after each. "
-                "Each log_attempt returns the next exercise. When an exercise carries new_scene, move into that scene "
-                "with a short bridge."
+                "Run this exercise, wait for the learner's answer, then call log_attempt. Each log_attempt "
+                "returns the next exercise. When an exercise carries new_scene, move into it with a short bridge."
             ),
         )
 
-    def next_items(self, limit: int = 3) -> NextItemsResult:
+    def skip_exercise(self) -> SkipResult:
+        """Set the current exercise aside and get a different one."""
         now = self.clock()
         s = self._current(now)
         s.last_activity = now
-        out = self._next(s, limit)
-        if not out:
-            out = self.planner.extra(now, s.practised, limit, s.id)
-        return NextItemsResult(exercises=out, seconds_left=s.seconds_left(now))
+        if s.pending is not None:
+            tid = s.pending.target.id
+            rung = s.learning.get(tid)
+            if rung is not None and rung.step == 0:
+                del s.learning[tid]  # not introduced after all: back of the queue
+                s.introduced.discard(tid)
+                s.new_queue.append(tid)
+            elif rung is not None:
+                rung.last = s.logged  # try it again a little later
+            elif s.pending.mode != "mission":
+                s.passed.add(tid)
+        return SkipResult(exercise=self.planner.next_exercise(now, s), seconds_left=s.seconds_left(now))
 
     # ----- logging -----
 
@@ -175,7 +135,7 @@ class Practice:
         for i, outcome in outcomes.items():
             if not self.cur.is_schedulable(i):
                 ignored.append(Ignored(id=i, why="not a word, set phrase or grammar pattern id from the exercises"))
-            elif not self.learner.unlocked(i) and i not in s.new_items:
+            elif not self.learner.unlocked(i) and i not in s.introduced:
                 ignored.append(Ignored(id=i, why="not introduced yet, so it isn't tracked"))
             else:
                 logged.append((i, outcome))
@@ -189,6 +149,9 @@ class Practice:
         changes = self.learner.apply(review)
         s.practised.update(i for i, _ in logged)
         s.last_activity = now
+        s.logged += 1
+        for i, outcome in logged:
+            s.record(i, outcome)
 
         result = LogAttemptResult(
             logged=[Logged(id=i, outcome=o) for i, o in logged],
@@ -198,21 +161,17 @@ class Practice:
         )
         if mode == "mission" and function:
             result.mission_passed = all(o != "wrong" for _, o in logged)
+        result.next = self.planner.next_exercise(now, s)
         if result.seconds_left <= 0:
             self.db.end_session(s.id, now)
             result.done = (
                 "Today's time is up. Wrap up warmly in a sentence or two. If the learner wants to keep going, "
-                "call next_items for extra practice."
+                "carry on with next."
             )
-            return result
-        nxt = self._next(s, 1)
-        if not nxt:
-            nxt = self.planner.extra(now, s.practised, 1, s.id)
-            if nxt:
-                result.note = "The plan for today is done; this is extra practice. Offer to stop here."
-        result.next = nxt[0] if nxt else None
-        if not nxt:
+        elif result.next is None:
             result.done = "Nothing left to practise right now. Wrap up warmly."
+        elif result.next.part == "extra":
+            result.note = "Today's practice is done; this is extra. Offer to stop here."
         return result
 
     # ----- progress -----

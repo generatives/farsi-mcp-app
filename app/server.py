@@ -17,7 +17,7 @@ from mcp.server.transport_security import TransportSecuritySettings
 
 from app import curriculum, settings
 from app.db import Database
-from app.models import LogAttemptResult, Missed, Mode, NextItemsResult, ProgressResult, StartSessionResult
+from app.models import LogAttemptResult, Missed, Mode, ProgressResult, SkipResult, StartSessionResult
 from app.practice import Practice
 
 log = logging.getLogger("farsi")
@@ -26,8 +26,12 @@ INSTRUCTIONS = """\
 Tools for practising spoken colloquial Persian (Farsi) by voice. The server decides what to practise \
 and when; you turn its plan into natural spoken exchanges and grade what the learner says.
 
-- Call start_session first in every practice conversation, then run its exercises in order, one at a time, \
-and call log_attempt after each. Each log_attempt returns the next exercise.
+- Call start_session first in every practice conversation. It returns the first exercise. Run it, wait for \
+the learner's answer, then call log_attempt, which returns the next exercise. Always exactly one exercise at \
+a time. If an exercise doesn't work in the moment, call skip_exercise for a different one.
+- Go slowly. Persian is hard work for the learner. Say one short Persian sentence at a time, then stop and \
+let them answer. Don't stack several prompts or race on to the next exercise. When a word is new, say it \
+clearly, twice. A short "آفرین" or a quick correction is enough feedback before moving on.
 - Persian script, always. Every Persian word you say or write goes in Persian script (سلام, never "salâm"): \
 in example sentences, cues, hints, models, corrections, role-plays and feedback, even a single word in the \
 middle of an English sentence. Voice mode pronounces Persian script correctly and mangles Latin letters. \
@@ -40,10 +44,11 @@ words; if you need one, give its meaning. Use only the learner's known grammar, 
 - One hard thing per sentence: the target is what's being tested. Keep everything else easy.
 - Never decide that something new is unlocked; only the server does that.
 - Never name a grammar pattern ("ezâfe", "subjunctive") to the learner unless they ask.
-- Ask the due exercises inside the scenes the server gives, not as a list of prompts. When an exercise \
-carries new_scene, bridge to it in a sentence ("Later that evening, at your aunt's…").
-- Session shape: a short warm-up, the scenes, then something new. Keep your own talk brief; the learner \
-should be speaking most of the time.
+- Ask each exercise inside the current scene, not as a bare prompt. When an exercise carries new_scene, \
+bridge to it in a sentence ("Later that evening, at your aunt's…").
+- New items come back several times in a session on purpose (new_step says which time). Keep their \
+sentences especially short and simple. Keep your own talk brief; the learner should be speaking most of \
+the time.
 """
 
 RUBRIC = """\
@@ -98,8 +103,8 @@ def practice() -> Practice:
 @mcp.tool(
     description=(
         "Start a practice session. Call this first in every practice conversation. Returns a short summary, "
-        "today's plan (warm-up, scenes, something new), the learner's known grammar, and the first three "
-        "exercises to run in order."
+        "the learner's known grammar and vocabulary, the new items this session may introduce, and the first "
+        "exercise."
     )
 )
 def start_session() -> StartSessionResult:
@@ -107,10 +112,10 @@ def start_session() -> StartSessionResult:
         return practice().start_session()
 
 
-@mcp.tool(description="Rarely needed: more planned exercises without logging an attempt, for example after a skipped exercise or for extra practice once the plan is done.")
-def next_items(limit: int = 3) -> NextItemsResult:
+@mcp.tool(description="Rarely needed: set the current exercise aside without logging it and get a different one.")
+def skip_exercise() -> SkipResult:
     with _lock:
-        return practice().next_items(max(1, min(limit, 10)))
+        return practice().skip_exercise()
 
 
 @mcp.tool(description=RUBRIC)
