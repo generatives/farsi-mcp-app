@@ -121,7 +121,7 @@ jobs:
             -H 'content-type: application/json' \
             -H 'accept: application/json, text/event-stream' \
             -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}')
-          for tool in start_session log_attempt next_items get_progress; do
+          for tool in start_session log_attempt skip_exercise get_progress; do
             echo "$body" | grep -q "\"$tool\"" || { echo "::error::tools/list is missing $tool"; exit 1; }
           done
           echo "Deployed $REF ($(git rev-parse --short HEAD)) to $URL" >> "$GITHUB_STEP_SUMMARY"
